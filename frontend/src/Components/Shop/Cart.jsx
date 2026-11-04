@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function Cart() {
   const { cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart } = useShop();
@@ -41,7 +42,7 @@ export default function Cart() {
                   <div className="w3-row">
                     <div className="w3-col" style={{ width: "110px" }}>
                       <img 
-                        src={item.product.images?.[0] ? `http://localhost:8000/storage/products/${item.product.images[0].image_path}` : 'http://localhost:8000/storage/products/default-product.jpg'}
+                        src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
                         alt={item.product.nazwa}
                         className="cart-thumbnail"
                       />

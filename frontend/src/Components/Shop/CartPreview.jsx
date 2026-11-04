@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
 import PropTypes from 'prop-types';
+import { API_URL } from '../../config';
 
 export default function CartPreview({ isVisible, onMouseEnter, onMouseLeave }) {
   const { cart, removeFromCart, updateCartQuantity, getCartTotal } = useShop();
@@ -32,7 +33,7 @@ export default function CartPreview({ isVisible, onMouseEnter, onMouseLeave }) {
               <div key={item.id} className="cart-preview-item w3-row w3-margin-bottom">
                 <div className="w3-col" style={{ width: "60px" }}>
                   <img 
-                    src={item.product.images?.[0] ? `http://localhost:8000/storage/products/${item.product.images[0].image_path}` : 'http://localhost:8000/storage/products/default-product.jpg'}
+                    src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
                     alt={item.product.nazwa}
                     className="cart-preview-image"
                   />

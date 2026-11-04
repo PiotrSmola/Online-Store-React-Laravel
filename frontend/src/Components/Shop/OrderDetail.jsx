@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -19,7 +20,7 @@ export default function OrderDetail() {
 
   async function fetchOrderDetail() {
     try {
-      const res = await fetch(`http://localhost:8000/api/orders/${id}`, {
+      const res = await fetch(`${API_URL}/api/orders/${id}`, {
         headers: {
           Authorization: `Bearer ${customerToken}`,
           Accept: 'application/json',
@@ -248,7 +249,7 @@ export default function OrderDetail() {
                     <div className="w3-row">
                       <div className="w3-col s3">
                         <img 
-                          src={item.product.images?.[0] ? `http://localhost:8000/storage/products/${item.product.images[0].image_path}` : 'http://localhost:8000/storage/products/default-product.jpg'}
+                          src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
                           alt={item.product.nazwa}
                           className="product-thumbnail-medium"
                         />

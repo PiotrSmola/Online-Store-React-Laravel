@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function Checkout() {
   const { cart, getCartTotal, clearCart, loginCustomer, customer } = useShop();
@@ -243,7 +244,7 @@ export default function Checkout() {
         total_with_delivery: getTotalWithDelivery()
       };
 
-      const res = await fetch('http://localhost:8000/api/orders', {
+      const res = await fetch(`${API_URL}/api/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -591,7 +592,7 @@ export default function Checkout() {
               <div key={item.id} className="w3-row w3-margin-bottom">
                 <div className="w3-col s3">
                   <img 
-                    src={item.product.images?.[0] ? `http://localhost:8000/storage/products/${item.product.images[0].image_path}` : 'http://localhost:8000/storage/products/default-product.jpg'}
+                    src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
                     alt={item.product.nazwa}
                     style={{ width: '40px', height: '40px', objectFit: 'cover' }}
                   />

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import PropTypes from 'prop-types';
+import { API_URL } from '../config';
 
 export const ShopContext = createContext();
 
@@ -22,7 +23,7 @@ export default function ShopProvider({ children }) {
     if (!customerToken) return;
 
     try {
-      const res = await fetch("http://localhost:8000/api/customer/me", {
+      const res = await fetch(`${API_URL}/api/customer/me`, {
         headers: {
           Authorization: `Bearer ${customerToken}`,
           Accept: 'application/json',
@@ -46,7 +47,7 @@ export default function ShopProvider({ children }) {
   async function fetchProducts() {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/products");
+      const res = await fetch(`${API_URL}/api/products`);
       if (res.ok) {
         const data = await res.json();
         setProducts(data);
@@ -60,7 +61,7 @@ export default function ShopProvider({ children }) {
 
   async function fetchCategories() {
     try {
-      const res = await fetch("http://localhost:8000/api/categories");
+      const res = await fetch(`${API_URL}/api/categories`);
       if (res.ok) {
         const data = await res.json();
         setCategories(data);
@@ -141,7 +142,7 @@ export default function ShopProvider({ children }) {
   const logoutCustomer = async () => {
     if (customerToken) {
       try {
-        await fetch("http://localhost:8000/api/customer/logout", {
+        await fetch(`${API_URL}/api/customer/logout`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${customerToken}`,

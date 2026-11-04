@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function CategoryProducts() {
   const { category } = useParams();
@@ -15,7 +16,7 @@ export default function CategoryProducts() {
   async function fetchCategoryProducts() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/category/${encodeURIComponent(category)}`);
+      const res = await fetch(`${API_URL}/api/products/category/${encodeURIComponent(category)}`);
       if (res.ok) {
         const data = await res.json();
         setProducts(data);
@@ -35,7 +36,7 @@ export default function CategoryProducts() {
     <>
       <div className="w3-display-container w3-container">
         <img 
-          src={'http://localhost:8000/storage/header-banner.jpg'} 
+          src={`${API_URL}/storage/header-banner.jpg`} 
           alt={decodeURIComponent(category)} 
           className="category-banner"
           style={{ width: "100%", height: "auto" }}
@@ -61,7 +62,7 @@ export default function CategoryProducts() {
             <div className="w3-container">
               <div className="w3-display-container">
                 <img 
-                  src={product.images?.[0] ? `http://localhost:8000/storage/products/${product.images[0].image_path}` : 'http://localhost:8000/storage/products/default-product.jpg'}
+                  src={product.images?.[0] ? `${API_URL}/storage/products/${product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
                   alt={product.nazwa}
                   className="product-image"
                 />

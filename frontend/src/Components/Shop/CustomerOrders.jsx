@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function CustomerOrders() {
   const { customer, customerToken } = useShop();
@@ -15,7 +16,7 @@ export default function CustomerOrders() {
 
   async function fetchOrders() {
     try {
-      const res = await fetch('http://localhost:8000/api/orders', {
+      const res = await fetch(`${API_URL}/api/orders`, {
         headers: {
           Authorization: `Bearer ${customerToken}`,
           Accept: 'application/json',

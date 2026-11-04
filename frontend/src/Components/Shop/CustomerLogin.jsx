@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
+import { API_URL } from '../../config';
 
 export default function CustomerLogin() {
   const { loginCustomer } = useShop();
@@ -27,7 +28,7 @@ export default function CustomerLogin() {
     setErrors({});
 
     try {
-      const res = await fetch('http://localhost:8000/api/customer/login', {
+      const res = await fetch(`${API_URL}/api/customer/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
