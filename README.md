@@ -19,7 +19,61 @@ A full-stack e-commerce application built with **Laravel** (backend API) and **R
 - **Order History**: View past orders and order details
 - **Responsive Design**: Mobile-friendly interface with Tailwind CSS
 
-## 📋 Prerequisites
+## 🐳 Quick Start with Docker (recommended)
+
+The only requirement is **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (or Docker Engine + Compose v2 on Linux). PHP, Composer, Node.js and MySQL run inside containers.
+
+```bash
+git clone https://github.com/PiotrSmola/Online-Store-React-Laravel.git
+cd Online-Store-React-Laravel
+```
+
+Then run the setup script:
+
+| System | Command |
+|--------|---------|
+| Windows | double-click `setup.cmd` or run `powershell -ExecutionPolicy Bypass -File .\setup.ps1` |
+| Linux / macOS / Git Bash | `./setup.sh` |
+
+The script:
+1. checks that Docker is installed and running,
+2. finds free ports — if a default port is already taken, it **uses the next free one** (it never stops anything that is already running),
+3. generates a root `.env` file (Laravel `APP_KEY`, database passwords) on the first run and reuses it later,
+4. builds the images, starts the containers, runs migrations, seeds the products and waits until the shop responds,
+5. prints the URLs.
+
+| Service | Default port | URL |
+|---------|--------------|-----|
+| Shop (React + nginx) | `8080` | http://localhost:8080 |
+| API (Laravel + Apache) | `8000` | http://localhost:8000/api/products |
+| MySQL (localhost only) | `3306` | `127.0.0.1:3306` |
+
+The actual ports are printed at the end of the script and saved in `.env`. Preferred ports can be changed, e.g. `.\setup.ps1 -AppPort 3000` or `./setup.sh --app-port 3000`.
+
+### Architecture
+
+```
+browser ──► frontend (nginx :80) ──► /            React build (SPA)
+                                 ├─► /api/*       ─┐
+                                 └─► /storage/*   ─┴─► backend (PHP 8.3 + Apache) ──► db (MySQL 8.4)
+```
+
+The frontend is built with `VITE_API_URL=/`, so the browser talks only to one origin and nginx proxies API calls and product images to Laravel — no CORS configuration needed.
+
+### Useful commands
+
+```bash
+docker compose ps              # container status
+docker compose logs -f backend # follow Laravel logs
+docker compose down            # stop the stack
+docker compose down -v         # stop and delete the database volume
+./setup.sh                     # (or setup.ps1) rebuild & redeploy after code changes
+docker compose exec backend php artisan migrate:fresh --force && docker compose exec backend php artisan shop:seed
+```
+
+> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database.
+
+## 📋 Prerequisites (manual setup without Docker)
 
 - **PHP** >= 8.2
 - **Node.js** >= 14
