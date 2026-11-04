@@ -10,22 +10,29 @@ use Illuminate\Support\Facades\Storage;
 
 class SeedShopData extends Command
 {
-    protected $signature = 'shop:seed';
-    protected $description = 'Seed shop data from external API';
+    protected $signature = 'shop:seed
+                            {--if-empty : Pomiń seedowanie, jeśli w bazie są już produkty}
+                            {--local : Użyj tylko lokalnego pliku z danymi (bez zapytania do API)}';
+
+    protected $description = 'Seed shop data from external API (falls back to database/data/products.json)';
+
+    private const API_URL = 'https://run.mocky.io/v3/d175ce87-f8d2-4df3-84e8-c1342af1bf54';
 
     public function handle()
     {
-        $this->info('Pobieranie danych produktów...');
+        if ($this->option('if-empty') && Product::exists()) {
+            $this->info('Produkty już istnieją w bazie - pomijam seedowanie.');
+            return 0;
+        }
 
         try {
-            $response = Http::get('https://run.mocky.io/v3/d175ce87-f8d2-4df3-84e8-c1342af1bf54');
+            $products = $this->loadProducts();
 
-            if (!$response->successful()) {
-                $this->error('Nie udało się pobrać danych z API');
+            if ($products === null) {
+                $this->error('Nie udało się pobrać danych produktów (ani z API, ani z pliku lokalnego).');
                 return 1;
             }
 
-            $products = $response->json();
             $this->info('Znaleziono ' . count($products) . ' produktów');
 
             if (!Storage::disk('public')->exists('products')) {
@@ -58,14 +65,41 @@ class SeedShopData extends Command
 
             $this->info('');
             $this->info('Pomyślnie zaimportowano ' . count($products) . ' produktów!');
-            $this->info('');
-            $this->warn('UWAGA: Pamiętaj o dodaniu rzeczywistych zdjęć produktów do katalogu storage/app/public/products/');
-            $this->warn('Pliki powinny nazywać się: zdj1.jpg, zdj2.jpg, zdj3.jpg, itd.');
 
             return 0;
         } catch (\Exception $e) {
             $this->error('Błąd podczas importowania danych: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    private function loadProducts(): ?array
+    {
+        if (!$this->option('local')) {
+            $this->info('Pobieranie danych produktów z API...');
+
+            try {
+                $response = Http::timeout(10)->get(self::API_URL);
+
+                if ($response->successful() && is_array($response->json())) {
+                    return $response->json();
+                }
+
+                $this->warn('API zwróciło błąd (HTTP ' . $response->status() . ').');
+            } catch (\Exception $e) {
+                $this->warn('Nie udało się połączyć z API: ' . $e->getMessage());
+            }
+        }
+
+        $path = database_path('data/products.json');
+        $this->info('Wczytywanie danych z pliku lokalnego: ' . $path);
+
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $products = json_decode(file_get_contents($path), true);
+
+        return is_array($products) ? $products : null;
     }
 }
