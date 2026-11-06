@@ -34,6 +34,12 @@
   "overrides": {
     "eslint-plugin-react": {
       "eslint": "$eslint"
+    },
+    "eslint": {
+      "minimatch": "^11.0.5"
+    },
+    "@eslint/config-array": {
+      "minimatch": "^11.0.5"
     }
   }
 }
