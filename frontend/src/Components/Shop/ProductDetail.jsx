@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link, useParams } from 'react-router';
 import { useCartActions } from '../../Context/useShop';
 import { useToast } from '../../Context/useToast';
 import { useProduct } from '../../hooks/useCatalog';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useResource } from '../../hooks/useResource';
+import { getProduct } from '../../lib/catalog';
 import {
   categoryPath,
   cleanOptions,
@@ -29,7 +31,6 @@ import ProductReviews from './ProductReviews';
 import WishlistToggle from './WishlistToggle';
 
 const MAIN_IMAGE_SIZES = '(min-width: 64rem) 50vw, 100vw';
-const GALLERY_THUMB_SIZES = '25vw';
 
 function Gallery({ images, name }) {
   const [selected, setSelected] = useState(0);
@@ -54,7 +55,7 @@ function Gallery({ images, name }) {
                 className="block w-full cursor-pointer"
                 onClick={() => setSelected(index)}
               >
-                <ProductImage image={image} alt="" thumbnail sizes={GALLERY_THUMB_SIZES} />
+                <ProductImage image={image} alt="" thumbnail />
               </button>
             </li>
           ))}
@@ -166,7 +167,18 @@ function ProductSkeleton() {
   );
 }
 
+/** The saved review changes the average, which only the server can work out. */
+function useRatingAfterReview(product) {
+  const [reviewsSaved, setReviewsSaved] = useState(0);
+  const load = useCallback((signal) => getProduct(product.id, { signal }), [product.id]);
+  const { data } = useResource(load, reviewsSaved > 0 ? `rating:${reviewsSaved}` : null, { keepPrevious: true });
+
+  return { rating: data ?? product, noteReviewSaved: () => setReviewsSaved((count) => count + 1) };
+}
+
 function ProductView({ product }) {
+  const { rating, noteReviewSaved } = useRatingAfterReview(product);
+
   return (
     <>
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
@@ -177,9 +189,9 @@ function ProductView({ product }) {
             <ProductLabel product={product} />
           </div>
           <Price product={product} className="text-2xl" />
-          {product.reviews_count > 0 && (
+          {rating.reviews_count > 0 && (
             <div className="mt-3">
-              <Stars rating={product.ocena} />
+              <Stars rating={rating.ocena} />
             </div>
           )}
           <p className="mt-6 max-w-prose whitespace-pre-line">{product.opis}</p>
@@ -196,7 +208,7 @@ function ProductView({ product }) {
         </div>
       </div>
 
-      <ProductReviews product={product} />
+      <ProductReviews product={product} onReviewSaved={noteReviewSaved} />
 
       {product.related?.length > 0 && (
         <section aria-labelledby="related-products" className="mt-16">

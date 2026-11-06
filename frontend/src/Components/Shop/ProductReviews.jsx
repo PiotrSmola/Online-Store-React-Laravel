@@ -79,11 +79,12 @@ ReviewForm.propTypes = {
 };
 
 /** Comments are user content, so they stay plain text. A customer's new review replaces the old. */
-export default function ProductReviews({ product }) {
+export default function ProductReviews({ product, onReviewSaved }) {
   const [reviews, setReviews] = useState(product.reviews ?? []);
 
   const handleSaved = (review) => {
     setReviews((current) => [review, ...current.filter((item) => item.id !== review.id)]);
+    onReviewSaved();
   };
 
   return (
@@ -118,4 +119,5 @@ ProductReviews.propTypes = {
     reviews: PropTypes.arrayOf(PropTypes.object),
     can_review: PropTypes.bool,
   }).isRequired,
+  onReviewSaved: PropTypes.func.isRequired,
 };
