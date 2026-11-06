@@ -30,7 +30,7 @@ export default function CatalogView({ title, resource, emptyText }) {
         <EmptyState title={emptyText} action={<ButtonLink to="/products">Zobacz wszystkie produkty</ButtonLink>} />
       )}
 
-      {data && data.items.length > 0 && <ProductGrid products={data.items} />}
+      {data && data.items.length > 0 && <ProductGrid products={data.items} prioritizeFirstRow />}
     </div>
   );
 }

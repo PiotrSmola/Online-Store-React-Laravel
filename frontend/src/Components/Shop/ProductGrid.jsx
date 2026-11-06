@@ -24,7 +24,7 @@ function ProductTile({ product, priority }) {
   return (
     <li>
       <Link to={`/product/${product.id}`} className="group block">
-        <ProductImage image={product.images?.[0]} alt={product.nazwa} thumbnail priority={priority} />
+        <ProductImage image={product.images?.[0]} alt="" thumbnail priority={priority} />
         <span className="mt-2 block group-hover:underline">{product.nazwa}</span>
         <span className="block font-semibold">{formatPrice(product.cena)}</span>
       </Link>
@@ -47,11 +47,16 @@ function tilePriority(index) {
   return index < FIRST_ROW ? 'eager' : 'lazy';
 }
 
-export default function ProductGrid({ products }) {
+/** prioritizeFirstRow is only for a grid at the top of a page, where a tile can be the LCP image. */
+export default function ProductGrid({ products, prioritizeFirstRow = false }) {
   return (
     <ul className={GRID}>
       {products.map((product, index) => (
-        <ProductTile key={product.id} product={product} priority={tilePriority(index)} />
+        <ProductTile
+          key={product.id}
+          product={product}
+          priority={prioritizeFirstRow ? tilePriority(index) : 'lazy'}
+        />
       ))}
     </ul>
   );
@@ -59,6 +64,7 @@ export default function ProductGrid({ products }) {
 
 ProductGrid.propTypes = {
   products: PropTypes.arrayOf(PropTypes.object).isRequired,
+  prioritizeFirstRow: PropTypes.bool,
 };
 
 /** Keeps the space of the final grid, so nothing moves when products arrive. */

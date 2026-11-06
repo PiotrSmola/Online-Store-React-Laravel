@@ -2,10 +2,10 @@ import { lazy } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 import ShopProvider from './Context/ShopContext';
 import ToastProvider from './Context/ToastContext';
+import Home from './Components/Shop/Home';
 import ShopLayout from './Components/Shop/Layout';
 import RequireAuth from './Components/Shop/RequireAuth';
 
-const Home = lazy(() => import('./Components/Shop/Home'));
 const ProductList = lazy(() => import('./Components/Shop/ProductList'));
 const CategoryProducts = lazy(() => import('./Components/Shop/CategoryProducts'));
 const ProductDetail = lazy(() => import('./Components/Shop/ProductDetail'));
