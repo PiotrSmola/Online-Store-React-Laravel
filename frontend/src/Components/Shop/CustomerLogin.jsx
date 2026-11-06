@@ -38,14 +38,11 @@ export default function CustomerLogin() {
       });
 
       const data = await res.json();
-      console.log('Login response:', data); // Debug
 
       if (res.ok) {
-        console.log('Login successful, customer:', data.customer); // Debug
         loginCustomer(data.customer, data.token);
         navigate('/');
       } else {
-        console.error('Login failed:', data); // Debug
         if (data.errors) {
           setErrors(data.errors);
         } else {

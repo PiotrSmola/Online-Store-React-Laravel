@@ -16,12 +16,10 @@ class OrderController extends Controller
 {
     public function store(Request $request)
     {
-        Log::info('Otrzymane dane zamówienia:', $request->all());
-
         try {
             $authenticatedCustomer = $request->user('sanctum');
 
-            $validatedData = $request->validate([
+            $request->validate([
                 'customer_type' => 'required|in:individual,company',
                 'email' => $authenticatedCustomer ? 'nullable' : 'required|email',
                 'password' => 'nullable|string',
@@ -52,8 +50,6 @@ class OrderController extends Controller
                 $this->validateCardPayment($request->payment);
             }
 
-            Log::info('Dane po walidacji:', $validatedData);
-
             $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
             $orderItems = $this->buildOrderItems($request->cart_items);
 
@@ -79,15 +75,11 @@ class OrderController extends Controller
                         'email' => $request->email,
                         'password' => Hash::make($request->password),
                     ]);
-
-                    Log::info('Utworzono nowego klienta:', ['id' => $customer->id]);
                 }
 
                 $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
                 $deliveryPrice = config('shop.delivery_prices')[$request->delivery_method];
                 $totalAmount = round($itemsTotal + $deliveryPrice, 2);
-
-                Log::info('Obliczono pozycje zamówienia:', $orderItems);
 
                 $paymentDetails = [
                     'method' => $request->payment_method,
@@ -132,13 +124,11 @@ class OrderController extends Controller
                     'order_date' => now(),
                 ]);
 
-                Log::info('Utworzono zamówienie:', ['id' => $order->id]);
+                Log::info('Order created', ['order_id' => $order->id]);
 
                 foreach ($orderItems as $item) {
                     $order->items()->create($item);
                 }
-
-                Log::info('Zamówienie zakończone pomyślnie');
 
                 $response = [
                     'order' => $order->load('items.product.images'),
@@ -155,7 +145,6 @@ class OrderController extends Controller
                 return response()->json($response);
             });
         } catch (ValidationException $e) {
-            Log::error('Błędy walidacji:', $e->errors());
             return response()->json([
                 'message' => 'Błędy walidacji',
                 'errors' => $e->errors()
