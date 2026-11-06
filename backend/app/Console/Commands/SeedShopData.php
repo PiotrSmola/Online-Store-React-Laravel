@@ -40,9 +40,9 @@ class SeedShopData extends Command
         'Zgodne z opisem, szybka dostawa.',
         'Świetnie wygląda i dobrze leży.',
         'Solidne wykonanie, warte swojej ceny.',
-        'Jestem zadowolona z zakupu.',
+        'Udany zakup, wszystko w porządku.',
         'Dobry produkt, choć dostawa trwała dłużej.',
-        'Kupiłem drugi raz i nadal polecam.',
+        'Drugi zakup i nadal polecam.',
         'Materiał przyjemny w dotyku.',
     ];
 
