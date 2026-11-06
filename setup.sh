@@ -5,10 +5,10 @@
 #  - checks that Docker / Docker Compose are available,
 #  - picks free host ports (if a preferred port is taken, the next free one is used;
 #    nothing that is already running gets stopped - except this project's own containers),
-#  - generates the root .env file (APP_KEY, DB passwords) on first run and reuses it later,
+#  - generates the root .env file (APP_KEY, DB and admin passwords) on first run and reuses it later,
 #  - builds the images, starts the stack and waits until the shop responds.
 #
-# Usage:   ./setup.sh [--app-port N] [--backend-port N] [--db-port N] [--no-build]
+# Usage:   ./setup.sh [--app-port N] [--backend-port N] [--db-port N] [--mailpit-port N] [--no-build]
 # Re-run the script at any time to rebuild/redeploy.
 
 set -euo pipefail
@@ -16,6 +16,7 @@ set -euo pipefail
 APP_PORT_PREF=8080
 BACKEND_PORT_PREF=8000
 DB_PORT_PREF=3306
+MAILPIT_PORT_PREF=8025
 BUILD_FLAG="--build"
 PROJECT_NAME="online-store"
 
@@ -24,6 +25,7 @@ while [ $# -gt 0 ]; do
         --app-port)     APP_PORT_PREF="$2"; shift 2 ;;
         --backend-port) BACKEND_PORT_PREF="$2"; shift 2 ;;
         --db-port)      DB_PORT_PREF="$2"; shift 2 ;;
+        --mailpit-port) MAILPIT_PORT_PREF="$2"; shift 2 ;;
         --no-build)     BUILD_FLAG=""; shift ;;
         -h|--help)      sed -n '2,13p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -116,12 +118,16 @@ fi
 DOCKER_SUBNET="$(env_get "$ENV_FILE" DOCKER_SUBNET)"; [ -n "$DOCKER_SUBNET" ] || DOCKER_SUBNET="$(env_get "$EXAMPLE" DOCKER_SUBNET)"
 FRONTEND_IP="$(env_get "$ENV_FILE" FRONTEND_IP)";     [ -n "$FRONTEND_IP" ] || FRONTEND_IP="$(env_get "$EXAMPLE" FRONTEND_IP)"
 APP_DEBUG="$(env_get "$ENV_FILE" APP_DEBUG)";         [ -n "$APP_DEBUG" ] || APP_DEBUG="$(env_get "$EXAMPLE" APP_DEBUG)"
+MAIL_FROM_ADDRESS="$(env_get "$ENV_FILE" MAIL_FROM_ADDRESS)"; [ -n "$MAIL_FROM_ADDRESS" ] || MAIL_FROM_ADDRESS="$(env_get "$EXAMPLE" MAIL_FROM_ADDRESS)"
+ADMIN_EMAIL="$(env_get "$ENV_FILE" ADMIN_EMAIL)";     [ -n "$ADMIN_EMAIL" ] || ADMIN_EMAIL="$(env_get "$EXAMPLE" ADMIN_EMAIL)"
+ADMIN_PASSWORD="$(env_get "$ENV_FILE" ADMIN_PASSWORD)"; [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="$(random_string 20)"
 
 # --- 4. Free ports ------------------------------------------------------------
 step "Looking for free ports..."
 APP_PORT="$(find_free_port "$APP_PORT_PREF")"
 BACKEND_PORT="$(find_free_port "$BACKEND_PORT_PREF" "$APP_PORT")"
 DB_FORWARD_PORT="$(find_free_port "$DB_PORT_PREF" "$APP_PORT" "$BACKEND_PORT")"
+MAILPIT_PORT="$(find_free_port "$MAILPIT_PORT_PREF" "$APP_PORT" "$BACKEND_PORT" "$DB_FORWARD_PORT")"
 
 report_port() {
     if [ "$2" != "$3" ]; then
@@ -133,6 +139,7 @@ report_port() {
 report_port "Shop (frontend)" "$APP_PORT_PREF" "$APP_PORT"
 report_port "API (backend)" "$BACKEND_PORT_PREF" "$BACKEND_PORT"
 report_port "MySQL" "$DB_PORT_PREF" "$DB_FORWARD_PORT"
+report_port "Mailpit" "$MAILPIT_PORT_PREF" "$MAILPIT_PORT"
 
 # --- 5. Write .env ------------------------------------------------------------
 cat > "$ENV_FILE" <<EOF
@@ -140,6 +147,7 @@ cat > "$ENV_FILE" <<EOF
 APP_PORT=$APP_PORT
 BACKEND_PORT=$BACKEND_PORT
 DB_FORWARD_PORT=$DB_FORWARD_PORT
+MAILPIT_PORT=$MAILPIT_PORT
 
 DOCKER_SUBNET=$DOCKER_SUBNET
 FRONTEND_IP=$FRONTEND_IP
@@ -151,6 +159,10 @@ DB_DATABASE=$DB_DATABASE
 DB_USERNAME=$DB_USERNAME
 DB_PASSWORD=$DB_PASSWORD
 DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD
+
+MAIL_FROM_ADDRESS=$MAIL_FROM_ADDRESS
+ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_PASSWORD=$ADMIN_PASSWORD
 EOF
 step "Saved configuration to .env"
 
@@ -187,6 +199,8 @@ printf '\n\033[32mOnline Store is up and running!\033[0m\n'
 echo "  Shop:   $SHOP_URL"
 echo "  API:    http://127.0.0.1:$BACKEND_PORT/api/products"
 echo "  MySQL:  127.0.0.1:$DB_FORWARD_PORT  (db: $DB_DATABASE, user: $DB_USERNAME, password in .env)"
+echo "  Mailpit: http://127.0.0.1:$MAILPIT_PORT"
+echo "  Admin:  $ADMIN_EMAIL / $ADMIN_PASSWORD"
 echo
 echo "Useful commands:"
 echo "  docker compose logs -f      # follow logs"

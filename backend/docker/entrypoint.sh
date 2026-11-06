@@ -21,9 +21,16 @@ until php -r 'try { new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_
 done
 echo "[entrypoint] Database is up."
 
-php artisan migrate --force
-php artisan shop:seed --if-empty || echo "[entrypoint] WARNING: product seeding failed - the shop will start without products."
+# The queue worker shares this image and must not race the web container over these steps.
+if [ "$RUN_MIGRATIONS" != "false" ]; then
+    php artisan migrate --force
+    php artisan shop:seed --if-empty || echo "[entrypoint] WARNING: product seeding failed - the shop will start without products."
+    php artisan shop:admin || echo "[entrypoint] WARNING: admin account not created - set ADMIN_EMAIL and ADMIN_PASSWORD."
+    php artisan shop:thumbnails || echo "[entrypoint] WARNING: thumbnails not created - product pages will use the full size images."
+    php artisan sanctum:prune-expired --hours=24 || echo "[entrypoint] WARNING: expired tokens not pruned."
+fi
 
+# After the steps above: directories they created have to end up writable for Apache.
 chown -R www-data:www-data storage bootstrap/cache
 
 exec "$@"
