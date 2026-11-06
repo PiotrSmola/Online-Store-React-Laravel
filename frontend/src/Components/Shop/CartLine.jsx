@@ -2,6 +2,7 @@ import PropTypes from 'prop-types';
 import { Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useCartActions } from '../../Context/useShop';
+import { useToast } from '../../Context/useToast';
 import { formatPrice } from '../../lib/format';
 import { lineKey } from '../../lib/cart';
 import { optionsText } from '../../lib/product';
@@ -9,11 +10,21 @@ import QuantityStepper from '../ui/QuantityStepper';
 import Skeleton from '../ui/Skeleton';
 import ProductImage from './ProductImage';
 
-/** One cart row. item is the stored line; line is its priced version, absent until the quote loads. */
-export default function CartLine({ item, line = null, compact = false }) {
+/**
+ * One cart row. item is the stored line; line is its priced version, absent until the quote loads.
+ * onRemoved must move focus, because removing the row removes the button that holds it.
+ */
+export default function CartLine({ item, line = null, compact = false, onRemoved }) {
   const { setQuantity, removeItem } = useCartActions();
+  const toast = useToast();
   const key = lineKey(item);
   const name = line?.product?.nazwa ?? 'Produkt niedostępny';
+
+  const handleRemove = () => {
+    removeItem(key);
+    toast.success(`Usunięto z koszyka: ${name}`);
+    onRemoved();
+  };
 
   return (
     <li className={`grid gap-x-4 ${compact ? 'grid-cols-[3.5rem_1fr]' : 'grid-cols-[6rem_1fr] sm:grid-cols-[8rem_1fr]'}`}>
@@ -43,7 +54,7 @@ export default function CartLine({ item, line = null, compact = false }) {
             type="button"
             aria-label={`Usuń z koszyka: ${name}`}
             className="grid size-11 cursor-pointer place-items-center rounded-control text-ember hover:bg-mist"
-            onClick={() => removeItem(key)}
+            onClick={handleRemove}
           >
             <Trash2 aria-hidden="true" className="size-5" />
           </button>
@@ -62,4 +73,5 @@ CartLine.propTypes = {
   }).isRequired,
   line: PropTypes.object,
   compact: PropTypes.bool,
+  onRemoved: PropTypes.func.isRequired,
 };

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 /**
@@ -7,17 +7,20 @@ import PropTypes from 'prop-types';
  */
 export default function ErrorSummary({ errors, focusKey, title = 'Popraw dane w formularzu' }) {
   const summary = useRef(null);
+  const titleId = useId();
 
   useEffect(() => {
     summary.current?.focus();
   }, [focusKey]);
 
   return (
-    <div ref={summary} tabIndex={-1} className="rounded-control bg-mist p-4">
-      <h2 className="text-xl text-ember">{title}</h2>
+    <div ref={summary} tabIndex={-1} role="group" aria-labelledby={titleId} className="rounded-control bg-mist p-4">
+      <h2 id={titleId} className="text-xl text-ember">
+        {title}
+      </h2>
       <ul className="mt-2 space-y-1">
-        {errors.map(({ id, message }) => (
-          <li key={`${id}-${message}`}>
+        {errors.map(({ id, message }, index) => (
+          <li key={`${index}-${id ?? message}`}>
             {id ? (
               <a
                 href={`#${id}`}

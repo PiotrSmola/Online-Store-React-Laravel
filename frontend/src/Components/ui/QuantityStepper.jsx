@@ -5,12 +5,17 @@ import { MAX_QUANTITY, clampQuantity } from '../../lib/cart';
 
 const STEP_BUTTON =
   'grid size-11 cursor-pointer place-items-center rounded-control text-ink hover:bg-mist ' +
-  'disabled:cursor-not-allowed disabled:text-stone disabled:hover:bg-transparent';
+  'aria-disabled:cursor-not-allowed aria-disabled:text-stone aria-disabled:hover:bg-transparent';
 
-/** target names the product for screen readers when a page has several steppers. */
+/**
+ * target names the product for screen readers when a page has several steppers. The buttons use
+ * aria-disabled at the limits: a disabled button would drop the keyboard focus it holds.
+ */
 export default function QuantityStepper({ value, onChange, target = '' }) {
   const [draft, setDraft] = useState(null);
   const suffix = target ? `: ${target}` : '';
+  const atMin = value <= 1;
+  const atMax = value >= MAX_QUANTITY;
 
   return (
     <div role="group" aria-label={`Ilość${suffix}`} className="inline-flex items-center">
@@ -18,8 +23,10 @@ export default function QuantityStepper({ value, onChange, target = '' }) {
         type="button"
         aria-label={`Zmniejsz ilość${suffix}`}
         className={STEP_BUTTON}
-        disabled={value <= 1}
-        onClick={() => onChange(value - 1)}
+        aria-disabled={atMin || undefined}
+        onClick={() => {
+          if (!atMin) onChange(value - 1);
+        }}
       >
         <Minus aria-hidden="true" className="size-4" />
       </button>
@@ -40,8 +47,10 @@ export default function QuantityStepper({ value, onChange, target = '' }) {
         type="button"
         aria-label={`Zwiększ ilość${suffix}`}
         className={STEP_BUTTON}
-        disabled={value >= MAX_QUANTITY}
-        onClick={() => onChange(value + 1)}
+        aria-disabled={atMax || undefined}
+        onClick={() => {
+          if (!atMax) onChange(value + 1);
+        }}
       >
         <Plus aria-hidden="true" className="size-4" />
       </button>

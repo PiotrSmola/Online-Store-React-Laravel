@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { useCartActions, useCartItems } from '../../Context/useShop';
+import { useToast } from '../../Context/useToast';
 import { useCartQuote } from '../../hooks/useCartQuote';
+import { useFocusPageHeading } from '../../hooks/useFocusPageHeading';
 import { lineKey } from '../../lib/cart';
 import { formatPrice } from '../../lib/format';
 import Button, { ButtonLink } from '../ui/Button';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
 import PageHeading from '../ui/PageHeading';
 import CartLine from './CartLine';
@@ -10,7 +14,17 @@ import CartLine from './CartLine';
 export default function Cart() {
   const items = useCartItems();
   const { clear } = useCartActions();
+  const toast = useToast();
   const { data: quote, error, reload } = useCartQuote(items);
+  const focusHeading = useFocusPageHeading();
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
+  const handleClear = () => {
+    setConfirmingClear(false);
+    clear();
+    toast.success('Koszyk został wyczyszczony');
+    focusHeading();
+  };
 
   if (items.length === 0) {
     return (
@@ -38,12 +52,21 @@ export default function Cart() {
                 key={lineKey(item)}
                 item={item}
                 line={quote?.lines.find((line) => line.key === lineKey(item))}
+                onRemoved={focusHeading}
               />
             ))}
           </ul>
-          <Button variant="plain" className="mt-8" onClick={clear}>
+          <Button variant="plain" className="mt-8" onClick={() => setConfirmingClear(true)}>
             Wyczyść koszyk
           </Button>
+          <ConfirmDialog
+            open={confirmingClear}
+            title="Wyczyścić koszyk?"
+            text="Usuniemy z niego wszystkie produkty."
+            confirmLabel="Wyczyść koszyk"
+            onConfirm={handleClear}
+            onCancel={() => setConfirmingClear(false)}
+          />
         </div>
 
         <section aria-labelledby="cart-summary" className="rounded-control bg-mist p-6 lg:sticky lg:top-8 lg:self-start">
