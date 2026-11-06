@@ -24,3 +24,7 @@ export function productHasOptions(product) {
 export function categoryPath(category) {
   return `/category/${encodeURIComponent(category)}`;
 }
+
+export function optionsText(size, color) {
+  return [size && `Rozmiar ${size}`, color && `Kolor ${color}`].filter(Boolean).join(', ');
+}

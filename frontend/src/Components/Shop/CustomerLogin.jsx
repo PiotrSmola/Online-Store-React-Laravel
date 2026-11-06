@@ -1,113 +1,122 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router";
-import { useShop } from "../../Context/useShop";
-import { API_URL } from '../../config';
+import { useState } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router';
+import { AUTH_STATUS } from '../../Context/authStatus';
+import { useAuth } from '../../Context/useShop';
+import { safeRedirect } from '../../lib/redirect';
+import { signIn } from '../../lib/session';
+import Button from '../ui/Button';
+import ErrorSummary from '../ui/ErrorSummary';
+import Field from '../ui/Field';
+import PageHeading from '../ui/PageHeading';
+
+const FIELD_IDS = { email: 'login-email', password: 'login-password' };
+
+function clientErrors({ email, password }) {
+  const errors = {};
+  if (!email.trim()) errors.email = 'Wpisz adres e-mail';
+  if (!password) errors.password = 'Wpisz hasło';
+  return errors;
+}
 
 export default function CustomerLogin() {
-  const { loginCustomer } = useShop();
-  const navigate = useNavigate();
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const { status, signInWith } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [failedSubmits, setFailedSubmits] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  if (status === AUTH_STATUS.authenticated) {
+    return <Navigate to={safeRedirect(searchParams.get('next'))} replace />;
+  }
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors({});
+  const fail = (fieldErrors, message = null) => {
+    setErrors(fieldErrors);
+    setFormError(message);
+    setFailedSubmits((count) => count + 1);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (submitting) return;
+
+    const found = clientErrors(form);
+    if (Object.keys(found).length > 0) {
+      fail(found);
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/customer/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        loginCustomer(data.customer, data.token);
-        navigate('/');
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setErrors({ email: [data.message || 'Nieprawidłowe dane logowania'] });
-        }
-      }
+      const { customer, token } = await signIn(form);
+      signInWith(customer, token);
     } catch (error) {
-      console.error('Error logging in:', error);
-      setErrors({ email: ['Wystąpił błąd podczas logowania'] });
-    } finally {
-      setLoading(false);
+      const fieldErrors = Object.fromEntries(
+        Object.entries(error.errors ?? {}).map(([field, messages]) => [field, messages[0]]),
+      );
+      fail(fieldErrors, Object.keys(fieldErrors).length > 0 ? null : error.message);
+      setSubmitting(false);
     }
   };
 
+  const summary = [
+    ...Object.entries(errors)
+      .filter(([, message]) => message)
+      .map(([field, message]) => ({ id: FIELD_IDS[field], message })),
+    ...(formError ? [{ message: formError }] : []),
+  ];
+
   return (
-    <div className="w3-container w3-padding-64">
-      <div className="w3-flex" style={{ justifyContent: 'center' }}>
-        <div className="w3-col l4 m6 s12 w3-margin-auto">
-          <div className="w3-card w3-padding-large">
-            <h2 className="w3-center w3-padding-16">Logowanie</h2>
-            
-            <form onSubmit={handleSubmit}>
-              <div className="w3-margin-bottom">
-                <label className="w3-text-black"><b>Email:</b></label>
-                <input 
-                  type="email" 
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="w3-input w3-border w3-margin-top"
-                  required
-                />
-                {errors.email && <p className="w3-text-red w3-small">{errors.email[0]}</p>}
-              </div>
+    <div className="gutter py-8 lg:py-12">
+      <div className="max-w-md">
+        <PageHeading>Logowanie</PageHeading>
 
-              <div className="w3-margin-bottom">
-                <label className="w3-text-black"><b>Hasło:</b></label>
-                <input 
-                  type="password" 
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w3-input w3-border w3-margin-top"
-                  required
-                />
-                {errors.password && <p className="w3-text-red w3-small">{errors.password[0]}</p>}
-              </div>
-
-              <button 
-                type="submit" 
-                className="w3-button w3-black w3-block w3-padding-large"
-                disabled={loading}
-              >
-                {loading ? 'Logowanie...' : 'Zaloguj się'}
-              </button>
-            </form>
-
-            <div className="w3-center w3-margin-top">
-              <p>Nie masz konta? Zostanie utworzone podczas pierwszego zakupu.</p>
-              <Link to="/" className="w3-button w3-light-grey">
-                Powrót do sklepu
-              </Link>
-            </div>
+        {summary.length > 0 && (
+          <div className="mt-6">
+            <ErrorSummary errors={summary} focusKey={failedSubmits} title="Nie udało się zalogować" />
           </div>
-        </div>
+        )}
+
+        <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <Field
+            id={FIELD_IDS.email}
+            label="E-mail"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={form.email}
+            error={errors.email}
+            onChange={handleChange}
+          />
+          <Field
+            id={FIELD_IDS.password}
+            label="Hasło"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={form.password}
+            error={errors.password}
+            onChange={handleChange}
+          />
+          <Button type="submit" block loading={submitting}>
+            Zaloguj się
+          </Button>
+        </form>
+
+        <p className="mt-6 text-stone">Nie masz konta? Założymy je przy pierwszym zamówieniu.</p>
+        <Link to="/products" className="mt-2 inline-block py-2 text-pine underline underline-offset-4">
+          Zobacz produkty
+        </Link>
       </div>
     </div>
   );

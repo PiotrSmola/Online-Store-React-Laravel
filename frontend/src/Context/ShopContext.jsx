@@ -1,207 +1,109 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { API_URL } from '../config';
-import { ShopContext } from './useShop';
+import { ApiError, getToken, isAbortError, onUnauthorized, storeToken } from '../lib/api';
+import { addLine, readCart, removeLine, setLineQuantity, writeCart } from '../lib/cart';
+import { getCurrentCustomer, signOut } from '../lib/session';
+import { AUTH_STATUS } from './authStatus';
+import { AuthContext, CartActionsContext, CartItemsContext } from './useShop';
 
-export default function ShopProvider({ children }) {
-  const [customer, setCustomer] = useState(null);
-  const [customerToken, setCustomerToken] = useState(localStorage.getItem("customerToken"));
-  const [cart, setCart] = useState(() => {
-    const savedCart = localStorage.getItem("cart");
-    return savedCart ? JSON.parse(savedCart) : [];
-  });
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
+const NO_SESSION = { token: null, customer: null, failed: false };
 
-  useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(cart));
-  }, [cart]);
+function AuthProvider({ children }) {
+  const [token, setToken] = useState(getToken);
+  const [session, setSession] = useState(NO_SESSION);
 
-  async function fetchProducts() {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/products`);
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const endSession = useCallback(() => {
+    storeToken(null);
+    setToken(null);
+    setSession(NO_SESSION);
+  }, []);
 
-  async function fetchCategories() {
-    try {
-      const res = await fetch(`${API_URL}/api/categories`);
-      if (res.ok) {
-        const data = await res.json();
-        setCategories(data);
-      }
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
-  }
+  useEffect(() => onUnauthorized(endSession), [endSession]);
 
-  const addToCart = (product, selectedSize = null, selectedColor = null, quantity = 1) => {
-    const cartKey = `${product.id}-${selectedSize || 'none'}-${selectedColor || 'none'}`;
-    
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => 
-        item.product.id === product.id && 
-        item.selectedSize === selectedSize && 
-        item.selectedColor === selectedColor
-      );
-
-      if (existingItem) {
-        return prevCart.map(item =>
-          item.product.id === product.id && 
-          item.selectedSize === selectedSize && 
-          item.selectedColor === selectedColor
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-
-      return [...prevCart, { 
-        id: cartKey,
-        product, 
-        selectedSize, 
-        selectedColor, 
-        quantity 
-      }];
-    });
-  };
-
-  const removeFromCart = (cartItemId) => {
-    setCart(prevCart => prevCart.filter(item => item.id !== cartItemId));
-  };
-
-  const updateCartQuantity = (cartItemId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeFromCart(cartItemId);
-      return;
-    }
-
-    setCart(prevCart => 
-      prevCart.map(item =>
-        item.id === cartItemId
-          ? { ...item, quantity: newQuantity }
-          : item
-      )
-    );
-  };
-
-  const clearCart = () => {
-    setCart([]);
-    localStorage.removeItem("cart");
-  };
-
-  const getCartTotal = () => {
-    return cart.reduce((total, item) => total + (parseFloat(item.product.cena) * item.quantity), 0);
-  };
-
-  const getCartItemsCount = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
-  };
-
-  // Same rule as the backend: blank stored options do not count as options.
-  const productHasOptions = (product) =>
-    [product.rozmiar, product.kolor].some((options) =>
-      [].concat(options ?? []).some((option) => String(option ?? '').trim() !== '')
-    );
-
-  const loginCustomer = (customerData, token) => {
-    setCustomer(customerData);
-    setCustomerToken(token);
-    localStorage.setItem("customerToken", token);
-  };
-
-  const logoutCustomer = async () => {
-    if (customerToken) {
-      try {
-        await fetch(`${API_URL}/api/customer/logout`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${customerToken}`,
-            Accept: 'application/json',
-          },
-        });
-      } catch (error) {
-        console.error("Error logging out:", error);
-      }
-    }
-
-    setCustomer(null);
-    setCustomerToken(null);
-    localStorage.removeItem("customerToken");
-  };
+  const verified = session.token === token;
 
   useEffect(() => {
-    async function getCustomer() {
-      if (!customerToken) return;
+    if (!token || verified) return undefined;
 
-      try {
-        const res = await fetch(`${API_URL}/api/customer/me`, {
-          headers: {
-            Authorization: `Bearer ${customerToken}`,
-            Accept: 'application/json',
-          },
-        });
+    const controller = new AbortController();
 
-        if (res.ok) {
-          const data = await res.json();
-          setCustomer(data);
-        } else {
-          console.error('Customer fetch failed:', res.status, res.statusText);
-          setCustomerToken(null);
-          setCustomer(null);
-          localStorage.removeItem("customerToken");
-        }
-      } catch (error) {
-        console.error("Error fetching customer:", error);
-      }
-    }
+    getCurrentCustomer({ signal: controller.signal }).then(
+      (customer) => setSession({ token, customer, failed: false }),
+      (error) => {
+        if (isAbortError(error)) return;
+        if (error instanceof ApiError && error.status === 401) endSession();
+        else setSession({ token, customer: null, failed: true });
+      },
+    );
 
-    // Sets loading straight away so the product list shows its loading state for the whole request.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchProducts();
-    fetchCategories();
-    if (customerToken) {
-      getCustomer();
-    }
-  }, [customerToken]);
+    return () => controller.abort();
+  }, [token, verified, endSession]);
 
-  const value = {
-    customer,
-    customerToken,
-    loginCustomer,
-    logoutCustomer,
-    
-    products,
-    categories,
-    loading,
-    fetchProducts,
-    
-    cart,
-    addToCart,
-    removeFromCart,
-    updateCartQuantity,
-    clearCart,
-    getCartTotal,
-    getCartItemsCount,
-    productHasOptions,
-  };
+  const signInWith = useCallback((customer, newToken) => {
+    storeToken(newToken);
+    setToken(newToken);
+    setSession({ token: newToken, customer, failed: false });
+  }, []);
+
+  const signOutCustomer = useCallback(async () => {
+    await signOut().catch(() => {});
+    endSession();
+  }, [endSession]);
+
+  const retry = useCallback(() => setSession(NO_SESSION), []);
+
+  const value = useMemo(() => {
+    let status = AUTH_STATUS.loading;
+    if (!token) status = AUTH_STATUS.guest;
+    else if (verified && session.customer) status = AUTH_STATUS.authenticated;
+    else if (verified && session.failed) status = AUTH_STATUS.unknown;
+
+    return {
+      status,
+      customer: verified ? session.customer : null,
+      signInWith,
+      signOutCustomer,
+      retry,
+    };
+  }, [token, verified, session, signInWith, signOutCustomer, retry]);
+
+  return <AuthContext value={value}>{children}</AuthContext>;
+}
+
+function CartProvider({ children }) {
+  const [items, setItems] = useState(() => readCart(localStorage));
+
+  useEffect(() => {
+    writeCart(localStorage, items);
+  }, [items]);
+
+  const actions = useMemo(
+    () => ({
+      addItem: (line) => setItems((current) => addLine(current, line)),
+      setQuantity: (key, quantity) => setItems((current) => setLineQuantity(current, key, quantity)),
+      removeItem: (key) => setItems((current) => removeLine(current, key)),
+      clear: () => setItems([]),
+    }),
+    [],
+  );
 
   return (
-    <ShopContext value={value}>
-      {children}
-    </ShopContext>
+    <CartActionsContext value={actions}>
+      <CartItemsContext value={items}>{children}</CartItemsContext>
+    </CartActionsContext>
   );
 }
 
-ShopProvider.propTypes = {
-  children: PropTypes.node.isRequired,
-};
+const childrenProps = { children: PropTypes.node.isRequired };
+AuthProvider.propTypes = childrenProps;
+CartProvider.propTypes = childrenProps;
+
+export default function ShopProvider({ children }) {
+  return (
+    <AuthProvider>
+      <CartProvider>{children}</CartProvider>
+    </AuthProvider>
+  );
+}
+
+ShopProvider.propTypes = childrenProps;
