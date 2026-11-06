@@ -4,7 +4,7 @@ import { useShop } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
 export default function Checkout() {
-  const { cart, getCartTotal, clearCart, loginCustomer, customer } = useShop();
+  const { cart, getCartTotal, clearCart, loginCustomer, customer, customerToken } = useShop();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   
@@ -249,6 +249,7 @@ export default function Checkout() {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          ...(customerToken ? { Authorization: `Bearer ${customerToken}` } : {}),
         },
         body: JSON.stringify(orderData)
       });
@@ -256,7 +257,7 @@ export default function Checkout() {
       const data = await res.json();
 
       if (res.ok) {
-        if (!customer) {
+        if (!customer && data.token) {
           loginCustomer(data.customer, data.token);
         }
         clearCart();

@@ -18,10 +18,12 @@ class OrderController extends Controller
         Log::info('Otrzymane dane zamówienia:', $request->all());
 
         try {
+            $authenticatedCustomer = $request->user('sanctum');
+
             $validatedData = $request->validate([
                 'customer_type' => 'required|in:individual,company',
-                'email' => 'required|email',
-                'password' => 'nullable|min:6',
+                'email' => $authenticatedCustomer ? 'nullable' : 'required|email',
+                'password' => 'nullable|string',
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'required|string|max:255',
                 'phone' => 'required|string|max:20',
@@ -53,46 +55,32 @@ class OrderController extends Controller
 
             Log::info('Dane po walidacji:', $validatedData);
 
+            $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
+
             // Failure paths must throw: a response returned from this closure would commit.
-            return DB::transaction(function () use ($request) {
-                $customer = Customer::where('email', $request->email)->first();
+            return DB::transaction(function () use ($request, $customer, $authenticatedCustomer) {
+                $customerData = [
+                    'first_name' => $request->first_name,
+                    'last_name' => $request->last_name,
+                    'phone' => $request->phone,
+                    'company_name' => $request->company_name,
+                    'nip' => $request->nip,
+                    'address' => $request->address,
+                    'city' => $request->city,
+                    'postal_code' => $request->postal_code,
+                    'country' => $request->country,
+                    'customer_type' => $request->customer_type,
+                ];
 
-                if (!$customer) {
-                    if (!$request->password) {
-                        throw ValidationException::withMessages([
-                            'password' => ['Hasło jest wymagane'],
-                        ]);
-                    }
-
-                    $customer = Customer::create([
+                if ($customer) {
+                    $customer->update($customerData);
+                } else {
+                    $customer = Customer::create($customerData + [
                         'email' => $request->email,
                         'password' => Hash::make($request->password),
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'phone' => $request->phone,
-                        'company_name' => $request->company_name,
-                        'nip' => $request->nip,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                        'customer_type' => $request->customer_type,
                     ]);
 
                     Log::info('Utworzono nowego klienta:', ['id' => $customer->id]);
-                } else {
-                    $customer->update([
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'phone' => $request->phone,
-                        'company_name' => $request->company_name,
-                        'nip' => $request->nip,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                        'customer_type' => $request->customer_type,
-                    ]);
                 }
 
                 $totalAmount = 0;
@@ -169,16 +157,21 @@ class OrderController extends Controller
                     $order->items()->create($item);
                 }
 
-                $token = $customer->createToken('customer-token')->plainTextToken;
-
                 Log::info('Zamówienie zakończone pomyślnie');
 
-                return response()->json([
+                $response = [
                     'order' => $order->load('items.product.images'),
                     'customer' => $customer,
-                    'token' => $token,
                     'message' => 'Zamówienie zostało złożone pomyślnie!'
-                ]);
+                ];
+
+                // A request that came with a token already has one; new tokens are only
+                // for accounts created here or proven by the correct password.
+                if (!$authenticatedCustomer) {
+                    $response['token'] = $customer->createToken('customer-token')->plainTextToken;
+                }
+
+                return response()->json($response);
             });
         } catch (ValidationException $e) {
             Log::error('Błędy walidacji:', $e->errors());
@@ -193,6 +186,37 @@ class OrderController extends Controller
                 'message' => 'Nie udało się złożyć zamówienia. Spróbuj ponownie później.'
             ], 500);
         }
+    }
+
+    // For a request without a token: the existing account if the password proves ownership,
+    // null if the email is free and a new account may be created.
+    private function findCustomerForGuest(Request $request): ?Customer
+    {
+        $customer = Customer::where('email', $request->email)->first();
+
+        if ($customer) {
+            if ($request->password === null || !Hash::check($request->password, $customer->password)) {
+                throw ValidationException::withMessages([
+                    'email' => ['Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.'],
+                ]);
+            }
+
+            return $customer;
+        }
+
+        if ($request->password === null) {
+            throw ValidationException::withMessages([
+                'password' => ['Hasło jest wymagane'],
+            ]);
+        }
+
+        if (mb_strlen($request->password) < 6) {
+            throw ValidationException::withMessages([
+                'password' => ['Hasło musi mieć minimum 6 znaków'],
+            ]);
+        }
+
+        return null;
     }
 
     // Exception messages can embed SQL bindings (emails, password hashes) and trace
