@@ -6,6 +6,7 @@ use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class CustomerAuthController extends Controller
 {
@@ -37,7 +38,12 @@ class CustomerAuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user('sanctum')->tokens()->delete();
+        $token = $request->user('sanctum')->currentAccessToken();
+
+        // A session-authenticated request carries a TransientToken, which has no delete().
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        }
 
         return response()->json([
             'message' => 'Wylogowano pomyślnie.'
