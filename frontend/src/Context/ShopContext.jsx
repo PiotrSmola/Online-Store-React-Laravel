@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import PropTypes from 'prop-types';
 import { API_URL } from '../config';
-
-export const ShopContext = createContext();
+import { ShopContext } from './useShop';
 
 export default function ShopProvider({ children }) {
   const [customer, setCustomer] = useState(null);
@@ -18,31 +17,6 @@ export default function ShopProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("cart", JSON.stringify(cart));
   }, [cart]);
-
-  async function getCustomer() {
-    if (!customerToken) return;
-
-    try {
-      const res = await fetch(`${API_URL}/api/customer/me`, {
-        headers: {
-          Authorization: `Bearer ${customerToken}`,
-          Accept: 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setCustomer(data);
-      } else {
-        console.error('Customer fetch failed:', res.status, res.statusText);
-        setCustomerToken(null);
-        setCustomer(null);
-        localStorage.removeItem("customerToken");
-      }
-    } catch (error) {
-      console.error("Error fetching customer:", error);
-    }
-  }
 
   async function fetchProducts() {
     setLoading(true);
@@ -166,6 +140,33 @@ export default function ShopProvider({ children }) {
   };
 
   useEffect(() => {
+    async function getCustomer() {
+      if (!customerToken) return;
+
+      try {
+        const res = await fetch(`${API_URL}/api/customer/me`, {
+          headers: {
+            Authorization: `Bearer ${customerToken}`,
+            Accept: 'application/json',
+          },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setCustomer(data);
+        } else {
+          console.error('Customer fetch failed:', res.status, res.statusText);
+          setCustomerToken(null);
+          setCustomer(null);
+          localStorage.removeItem("customerToken");
+        }
+      } catch (error) {
+        console.error("Error fetching customer:", error);
+      }
+    }
+
+    // Sets loading straight away so the product list shows its loading state for the whole request.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProducts();
     fetchCategories();
     if (customerToken) {
@@ -204,11 +205,3 @@ export default function ShopProvider({ children }) {
 ShopProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
-
-export function useShop() {
-  const context = useContext(ShopContext);
-  if (!context) {
-    throw new Error("useShop must be used within a ShopProvider");
-  }
-  return context;
-}

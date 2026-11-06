@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useShop } from "../../Context/ShopContext";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function CategoryProducts() {
@@ -20,23 +20,23 @@ export default function CategoryProducts() {
   };
 
   useEffect(() => {
+    async function fetchCategoryProducts() {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/api/products/category/${encodeURIComponent(category)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProducts(data);
+        }
+      } catch (error) {
+        console.error("Error fetching category products:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     fetchCategoryProducts();
   }, [category]);
-
-  async function fetchCategoryProducts() {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/products/category/${encodeURIComponent(category)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
-    } catch (error) {
-      console.error("Error fetching category products:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (loading) {
     return <div className="w3-container w3-center w3-padding-64">Ładowanie...</div>;

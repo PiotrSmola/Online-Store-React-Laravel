@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router";
-import { useShop } from "../../Context/ShopContext";
+import { useShop } from "../../Context/useShop";
 import { useState, useEffect } from "react";
 import CartPreview from "./CartPreview";
 

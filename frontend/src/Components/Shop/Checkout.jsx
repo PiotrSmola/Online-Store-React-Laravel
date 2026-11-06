@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useShop } from "../../Context/ShopContext";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function Checkout() {
@@ -36,6 +36,8 @@ export default function Checkout() {
   // autouzupełnienie danymi zalogowanego klienta
   useEffect(() => {
     if (customer) {
+      // The customer loads after the form mounts, and the fields stay editable afterwards.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData(prev => ({
         ...prev,
         customer_type: customer.customer_type || 'individual',

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { useShop } from "../../Context/ShopContext";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function ProductDetail() {
@@ -14,31 +14,31 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
-    fetchProduct();
-  }, [id]);
-
-  async function fetchProduct() {
-    try {
-      const res = await fetch(`${API_URL}/api/products/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProduct(data);
-        if (data.rozmiar?.length > 0) {
-          setSelectedSize(data.rozmiar[0]);
+    async function fetchProduct() {
+      try {
+        const res = await fetch(`${API_URL}/api/products/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProduct(data);
+          if (data.rozmiar?.length > 0) {
+            setSelectedSize(data.rozmiar[0]);
+          }
+          if (data.kolor?.length > 0) {
+            setSelectedColor(data.kolor[0]);
+          }
+        } else {
+          navigate('/');
         }
-        if (data.kolor?.length > 0) {
-          setSelectedColor(data.kolor[0]);
-        }
-      } else {
+      } catch (error) {
+        console.error("Error fetching product:", error);
         navigate('/');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching product:", error);
-      navigate('/');
-    } finally {
-      setLoading(false);
     }
-  }
+
+    fetchProduct();
+  }, [id, navigate]);
 
   const handleAddToCart = () => {
     addToCart(product, selectedSize, selectedColor, quantity);

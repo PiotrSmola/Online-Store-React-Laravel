@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { useShop } from "../../Context/ShopContext";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function OrderDetail() {
@@ -11,36 +11,36 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    async function fetchOrderDetail() {
+      try {
+        const res = await fetch(`${API_URL}/api/orders/${id}`, {
+          headers: {
+            Authorization: `Bearer ${customerToken}`,
+            Accept: 'application/json',
+          },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setOrder(data);
+        } else if (res.status === 404) {
+          navigate('/orders');
+        } else {
+          console.error('Order fetch failed:', res.status, res.statusText);
+        }
+      } catch (error) {
+        console.error("Error fetching order:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     if (customer && customerToken) {
       fetchOrderDetail();
     } else {
       navigate('/login');
     }
-  }, [id, customer, customerToken]);
-
-  async function fetchOrderDetail() {
-    try {
-      const res = await fetch(`${API_URL}/api/orders/${id}`, {
-        headers: {
-          Authorization: `Bearer ${customerToken}`,
-          Accept: 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setOrder(data);
-      } else if (res.status === 404) {
-        navigate('/orders');
-      } else {
-        console.error('Order fetch failed:', res.status, res.statusText);
-      }
-    } catch (error) {
-      console.error("Error fetching order:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  }, [id, customer, customerToken, navigate]);
 
   const getPaymentMethodLabel = (method) => {
     const methods = {
