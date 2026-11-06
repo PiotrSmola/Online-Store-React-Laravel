@@ -1,7 +1,25 @@
-import { passesLuhn } from './luhn';
+const MIN_PASSWORD_LENGTH = 8;
 
-const EMPTY_CARD = { card_number: '', card_name: '', expiry_date: '', cvv: '' };
-const MIN_PASSWORD_LENGTH = 6;
+export const CASH = 'cash';
+export const CARD = 'card';
+export const STORE_PICKUP = 'store_pickup';
+export const PICKUP_POINT = 'pickup_point';
+
+const EMPTY_SHIPPING = {
+  first_name: '',
+  last_name: '',
+  company_name: '',
+  address: '',
+  city: '',
+  postal_code: '',
+  country: 'Polska',
+};
+
+export const PAYMENT_METHODS = [
+  { value: CARD, label: 'Płatność kartą' },
+  { value: 'transfer', label: 'Przelew bankowy' },
+  { value: CASH, label: 'Płatność w sklepie' },
+];
 
 export function initialCheckoutForm(customer) {
   return {
@@ -17,22 +35,13 @@ export function initialCheckoutForm(customer) {
     city: customer?.city || '',
     postal_code: customer?.postal_code || '',
     country: customer?.country || 'Polska',
-    payment_method: 'card',
+    payment_method: CARD,
     delivery_method: 'courier',
-    payment: EMPTY_CARD,
+    pickup_point: '',
+    separate_shipping: false,
+    shipping: EMPTY_SHIPPING,
+    coupon_code: '',
   };
-}
-
-/** "4111111111111111" becomes "4111 1111 1111 1111". Other characters are dropped. */
-export function formatCardNumber(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 19);
-  return digits.replace(/(\d{4})(?=\d)/g, '$1 ');
-}
-
-/** "1228" becomes "12/28". */
-export function formatExpiry(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
 }
 
 function required(value, message) {
@@ -50,31 +59,23 @@ function passwordError(value) {
   return value.length < MIN_PASSWORD_LENGTH ? `Hasło musi mieć co najmniej ${MIN_PASSWORD_LENGTH} znaków` : null;
 }
 
-function cardNumberError(value) {
-  const digits = value.replace(/\s/g, '');
-  if (digits.length < 13 || digits.length > 19) return 'Numer karty musi mieć od 13 do 19 cyfr';
-  return passesLuhn(digits) ? null : 'Numer karty jest nieprawidłowy. Sprawdź cyfry';
+function shippingRules(form) {
+  if (!form.separate_shipping) return {};
+
+  const { shipping } = form;
+
+  return {
+    'shipping.first_name': () => required(shipping.first_name, 'Wpisz imię odbiorcy'),
+    'shipping.last_name': () => required(shipping.last_name, 'Wpisz nazwisko odbiorcy'),
+    'shipping.address': () => required(shipping.address, 'Wpisz ulicę i numer dostawy'),
+    'shipping.postal_code': () => required(shipping.postal_code, 'Wpisz kod pocztowy dostawy'),
+    'shipping.city': () => required(shipping.city, 'Wpisz miasto dostawy'),
+    'shipping.country': () => required(shipping.country, 'Wpisz kraj dostawy'),
+  };
 }
 
-function expiryError(value, now) {
-  if (!/^\d{2}\/\d{2}$/.test(value)) return 'Wpisz datę ważności w formacie MM/RR';
-
-  const [month, year] = value.split('/').map(Number);
-  if (month < 1 || month > 12) return 'Miesiąc musi mieć wartość od 01 do 12';
-
-  const currentYear = now.getFullYear() % 100;
-  const currentMonth = now.getMonth() + 1;
-  const expired = year < currentYear || (year === currentYear && month < currentMonth);
-  return expired ? 'Ta karta jest przeterminowana. Użyj innej karty' : null;
-}
-
-function cvvError(value) {
-  return /^\d{3,4}$/.test(value) ? null : 'CVV musi mieć 3 lub 4 cyfry';
-}
-
-function fieldRules(form, { isGuest, now }) {
+function fieldRules(form, { isGuest }) {
   const isCompany = form.customer_type === 'company';
-  const isCard = form.payment_method === 'card';
 
   return {
     email: () => emailError(form.email),
@@ -88,23 +89,21 @@ function fieldRules(form, { isGuest, now }) {
     city: () => required(form.city, 'Wpisz miasto'),
     postal_code: () => required(form.postal_code, 'Wpisz kod pocztowy'),
     country: () => required(form.country, 'Wpisz kraj'),
-    'payment.card_number': () => (isCard ? cardNumberError(form.payment.card_number) : null),
-    'payment.card_name': () => (isCard ? required(form.payment.card_name, 'Wpisz imię i nazwisko z karty') : null),
-    'payment.expiry_date': () => (isCard ? expiryError(form.payment.expiry_date, now) : null),
-    'payment.cvv': () => (isCard ? cvvError(form.payment.cvv) : null),
+    pickup_point: () => (form.delivery_method === PICKUP_POINT ? required(form.pickup_point, 'Wybierz paczkomat') : null),
+    ...shippingRules(form),
   };
 }
 
 /** The error of one field, or null. Used when a field loses focus. */
-export function validateField(name, form, { isGuest, now = new Date() }) {
-  return fieldRules(form, { isGuest, now })[name]?.() ?? null;
+export function validateField(name, form, { isGuest }) {
+  return fieldRules(form, { isGuest })[name]?.() ?? null;
 }
 
 /** Errors of the whole form as { field: message }. An empty object means the form is valid. */
-export function validateCheckout(form, { isGuest, now = new Date() }) {
+export function validateCheckout(form, { isGuest }) {
   const errors = {};
 
-  Object.entries(fieldRules(form, { isGuest, now })).forEach(([name, rule]) => {
+  Object.entries(fieldRules(form, { isGuest })).forEach(([name, rule]) => {
     const message = rule();
     if (message) errors[name] = message;
   });
@@ -112,21 +111,37 @@ export function validateCheckout(form, { isGuest, now = new Date() }) {
   return errors;
 }
 
-/** Card fields only leave the browser when paying by card. The server works out all prices. */
+function trimmedShipping({ company_name: companyName, ...shipping }) {
+  return { ...shipping, company_name: companyName || undefined };
+}
+
+/** The body of POST /orders. The server works out all prices, so none are sent. */
 export function buildOrderPayload(form, items, { isGuest }) {
   const isCompany = form.customer_type === 'company';
 
   return {
-    ...form,
-    password: isGuest ? form.password : null,
-    company_name: isCompany ? form.company_name : null,
-    nip: isCompany ? form.nip : null,
-    payment: form.payment_method === 'card' ? form.payment : EMPTY_CARD,
+    customer_type: form.customer_type,
+    email: isGuest ? form.email : undefined,
+    password: isGuest ? form.password : undefined,
+    first_name: form.first_name,
+    last_name: form.last_name,
+    phone: form.phone,
+    address: form.address,
+    city: form.city,
+    postal_code: form.postal_code,
+    country: form.country,
+    company_name: isCompany ? form.company_name : undefined,
+    nip: isCompany ? form.nip : undefined,
+    delivery_method: form.delivery_method,
+    pickup_point: form.delivery_method === PICKUP_POINT ? form.pickup_point : undefined,
+    payment_method: form.payment_method,
+    shipping: form.separate_shipping ? trimmedShipping(form.shipping) : undefined,
+    coupon_code: form.coupon_code || undefined,
     cart_items: items.map((item) => ({
       product_id: item.product_id,
       quantity: item.quantity,
-      selected_size: item.size,
-      selected_color: item.color,
+      selected_size: item.size ?? undefined,
+      selected_color: item.color ?? undefined,
     })),
   };
 }

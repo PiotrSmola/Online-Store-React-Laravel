@@ -23,7 +23,7 @@ export default function OrderSuccess() {
 
   return (
     <div className="gutter py-8 lg:py-12">
-      <PageHeading>Zamówienie zostało złożone</PageHeading>
+      <PageHeading>{order.payment_status === 'paid' ? 'Płatność przyjęta' : 'Zamówienie zostało złożone'}</PageHeading>
       <p className="mt-3 text-xl">Numer zamówienia: {order.order_number}</p>
       <OrderMeta order={order} />
 
@@ -39,7 +39,7 @@ export default function OrderSuccess() {
       </div>
 
       <div className="mt-12 flex flex-wrap gap-3">
-        <ButtonLink to="/orders">Moje zamówienia</ButtonLink>
+        <ButtonLink to={`/orders/${order.id}`}>Zobacz zamówienie</ButtonLink>
         <ButtonLink to="/products" variant="secondary">
           Kontynuuj zakupy
         </ButtonLink>

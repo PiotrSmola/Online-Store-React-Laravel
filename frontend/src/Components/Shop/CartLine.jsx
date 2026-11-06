@@ -49,7 +49,12 @@ export default function CartLine({ item, line = null, compact = false, onRemoved
         </div>
         {line?.error && <p className="mt-1 text-sm text-ember">{line.error}</p>}
         <div className={`flex items-center justify-between ${compact ? 'mt-1' : 'mt-3'}`}>
-          <QuantityStepper value={item.quantity} onChange={(quantity) => setQuantity(key, quantity)} target={name} />
+          <QuantityStepper
+            value={item.quantity}
+            max={line?.stock > 0 ? line.stock : undefined}
+            onChange={(quantity) => setQuantity(key, quantity)}
+            target={name}
+          />
           <button
             type="button"
             aria-label={`Usuń z koszyka: ${name}`}

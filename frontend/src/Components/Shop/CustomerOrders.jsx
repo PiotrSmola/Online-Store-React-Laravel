@@ -1,12 +1,14 @@
 import PropTypes from 'prop-types';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { useFocusPageHeading } from '../../hooks/useFocusPageHeading';
 import { useOrders } from '../../hooks/useOrders';
 import { countProducts, formatDate, formatPrice } from '../../lib/format';
 import Button, { ButtonLink } from '../ui/Button';
 import EmptyState from '../ui/EmptyState';
 import PageHeading from '../ui/PageHeading';
+import Pagination from '../ui/Pagination';
 import Skeleton from '../ui/Skeleton';
-import { OrderStatus } from './OrderParts';
+import { OrderStatus, PaymentStatus } from './OrderParts';
 
 const ROW = 'grid gap-x-8 gap-y-1 sm:grid-cols-[1fr_auto]';
 
@@ -26,7 +28,10 @@ function OrderRow({ order }) {
       <div className="sm:text-right">
         <p className="text-xl font-semibold">{formatPrice(order.total)}</p>
         <p>
-          <OrderStatus status={order.status} />
+          <OrderStatus order={order} />
+        </p>
+        <p className="text-sm">
+          <PaymentStatus order={order} />
         </p>
       </div>
     </li>
@@ -51,7 +56,10 @@ function OrdersSkeleton() {
 }
 
 export default function CustomerOrders() {
-  const { data: orders, error, loading, reload } = useOrders();
+  const [searchParams] = useSearchParams();
+  const page = Math.max(Number(searchParams.get('page')) || 1, 1);
+  const { data, error, loading, reload } = useOrders(page);
+  const focusHeading = useFocusPageHeading();
 
   return (
     <div className="gutter py-8 lg:py-12">
@@ -68,7 +76,7 @@ export default function CustomerOrders() {
           />
         )}
 
-        {orders?.length === 0 && (
+        {data?.items.length === 0 && (
           <EmptyState
             title="Nie masz jeszcze zamówień"
             text="Gdy złożysz zamówienie, zobaczysz je tutaj."
@@ -76,12 +84,22 @@ export default function CustomerOrders() {
           />
         )}
 
-        {orders?.length > 0 && (
-          <ul className="space-y-8">
-            {orders.map((order) => (
-              <OrderRow key={order.id} order={order} />
-            ))}
-          </ul>
+        {data?.items.length > 0 && (
+          <>
+            <ul className="space-y-8">
+              {data.items.map((order) => (
+                <OrderRow key={order.id} order={order} />
+              ))}
+            </ul>
+            <div className="mt-10">
+              <Pagination
+                page={data.page}
+                lastPage={data.lastPage}
+                hrefFor={(number) => (number > 1 ? `/orders?page=${number}` : '/orders')}
+                onNavigate={focusHeading}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -2,29 +2,40 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link, useNavigate } from 'react-router';
 import { useAuth, useCartActions, useCartItems } from '../../Context/useShop';
+import { useShopData } from '../../Context/useShopData';
 import { useCartQuote } from '../../hooks/useCartQuote';
-import { buildOrderPayload, formatCardNumber, formatExpiry, initialCheckoutForm, validateCheckout, validateField } from '../../lib/checkoutForm';
+import { useForm } from '../../hooks/useForm';
+import {
+  CARD,
+  CASH,
+  PAYMENT_METHODS,
+  PICKUP_POINT,
+  STORE_PICKUP,
+  buildOrderPayload,
+  initialCheckoutForm,
+  validateCheckout,
+  validateField,
+} from '../../lib/checkoutForm';
 import { formatPrice } from '../../lib/format';
 import { placeOrder } from '../../lib/orders';
 import { loginPath } from '../../lib/redirect';
 import { verifySession } from '../../lib/session';
-import { DELIVERY_METHODS, PAYMENT_METHODS } from '../../lib/shopConfig';
 import Button from '../ui/Button';
 import ErrorSummary from '../ui/ErrorSummary';
 import Field from '../ui/Field';
 import PageHeading from '../ui/PageHeading';
 import Radio from '../ui/Radio';
+import Select from '../ui/Select';
+import Skeleton from '../ui/Skeleton';
 import CheckoutSummary from './CheckoutSummary';
 
-const PAYMENT_PREFIX = 'payment.';
-const CASH = 'cash';
-const STORE_PICKUP = 'store_pickup';
+const SHIPPING_PREFIX = 'shipping.';
 
 const SECTION = 'border-0 p-0';
 const LEGEND = 'mb-3 text-2xl font-bold font-stretch-condensed';
 const ROW = 'grid gap-5 sm:grid-cols-2';
 
-const TEXT_FIELDS = new Set([
+const FIELD_NAMES = [
   'email',
   'password',
   'first_name',
@@ -36,112 +47,136 @@ const TEXT_FIELDS = new Set([
   'postal_code',
   'city',
   'country',
-  'payment.card_number',
-  'payment.card_name',
-  'payment.expiry_date',
-  'payment.cvv',
-]);
+  'pickup_point',
+  'coupon_code',
+  'shipping.first_name',
+  'shipping.last_name',
+  'shipping.company_name',
+  'shipping.address',
+  'shipping.postal_code',
+  'shipping.city',
+  'shipping.country',
+];
 
 function fieldId(name) {
   return `checkout-${name.replace('.', '-')}`;
 }
 
-function firstMessage(message) {
-  return Array.isArray(message) ? message[0] : message;
-}
+const FIELD_IDS = Object.fromEntries(FIELD_NAMES.map((name) => [name, fieldId(name)]));
 
 function setField(form, name, value) {
-  if (!name.startsWith(PAYMENT_PREFIX)) return { ...form, [name]: value };
+  if (!name.startsWith(SHIPPING_PREFIX)) return { ...form, [name]: value };
 
-  const field = name.slice(PAYMENT_PREFIX.length);
-  return { ...form, payment: { ...form.payment, [field]: value } };
+  const field = name.slice(SHIPPING_PREFIX.length);
+  return { ...form, shipping: { ...form.shipping, [field]: value } };
+}
+
+function fieldValue(form, name) {
+  return name.startsWith(SHIPPING_PREFIX) ? form.shipping[name.slice(SHIPPING_PREFIX.length)] : form[name];
 }
 
 function deliveryPriceText(price) {
   return price === 0 ? 'Bezpłatnie' : formatPrice(price);
 }
 
+/** Stock and coupon problems arrive as lists: errors.cart holds one message per line. */
+function withoutCartErrors({ cart, ...errors }) {
+  return { errors, cartMessage: cart ? [].concat(cart).join(' ') : null };
+}
+
 export default function CheckoutForm({ customer = null, onPlaced }) {
   const items = useCartItems();
   const { clear } = useCartActions();
   const { signInWith } = useAuth();
+  const { config } = useShopData();
   const navigate = useNavigate();
   const isGuest = !customer;
 
-  const [form, setForm] = useState(() => initialCheckoutForm(customer));
-  const [errors, setErrors] = useState({});
-  const [formError, setFormError] = useState(null);
-  const [failedSubmits, setFailedSubmits] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
+  const [values, setValues] = useState(() => initialCheckoutForm(customer));
+  const [appliedCoupon, setAppliedCoupon] = useState('');
+  const form = useForm(FIELD_IDS);
 
-  const quote = useCartQuote(items, { deliveryMethod: form.delivery_method });
+  const quote = useCartQuote(items, { coupon: appliedCoupon, deliveryMethod: values.delivery_method });
   const hasUnavailable = quote.data?.lines.some((line) => !line.available);
+  const couponError = quote.data?.coupon_error ?? null;
+  const pickupPoints = config.data?.pickup_points ?? [];
 
   const updateField = (name, value) => {
-    setForm((current) => setField(current, name, value));
-    setErrors((current) => ({ ...current, [name]: undefined }));
+    setValues((current) => setField(current, name, value));
+    form.setFieldError(name, null);
   };
 
   const handleChange = (event) => updateField(event.target.name, event.target.value);
 
   const handleBlur = (event) => {
     const { name } = event.target;
-    const message = validateField(name, form, { isGuest });
-    setErrors((current) => ({ ...current, [name]: message ?? undefined }));
+    form.setFieldError(name, validateField(name, values, { isGuest }));
   };
 
   const handleDelivery = (event) => {
     const deliveryMethod = event.target.value;
 
-    setForm((current) => ({
+    setValues((current) => ({
       ...current,
       delivery_method: deliveryMethod,
-      payment_method:
-        current.payment_method === CASH && deliveryMethod !== STORE_PICKUP ? 'card' : current.payment_method,
+      payment_method: current.payment_method === CASH && deliveryMethod !== STORE_PICKUP ? CARD : current.payment_method,
     }));
   };
 
-  const fail = (fieldErrors, message = null) => {
-    setErrors(fieldErrors);
-    setFormError(message);
-    setFailedSubmits((count) => count + 1);
+  const applyCoupon = () => setAppliedCoupon(values.coupon_code.trim());
+
+  const removeCoupon = () => {
+    setAppliedCoupon('');
+    updateField('coupon_code', '');
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (submitting) return;
+    if (form.submitting) return;
+
+    if (!quote.data) {
+      form.fail({}, 'Poczekaj na podsumowanie zamówienia albo spróbuj je wczytać ponownie.');
+      return;
+    }
 
     if (hasUnavailable) {
-      fail({}, 'Usuń z koszyka niedostępne produkty.');
+      form.fail({}, 'Popraw koszyk: niektóre produkty są niedostępne.');
       return;
     }
 
-    const found = validateCheckout(form, { isGuest });
+    const found = validateCheckout(values, { isGuest });
     if (Object.keys(found).length > 0) {
-      fail(found);
+      form.fail(found);
       return;
     }
 
-    setSubmitting(true);
+    form.reset();
 
-    try {
-      // The orders endpoint treats a dead token as a guest, which would leave this signed-in form
-      // with no password field and no way forward. A refused token redirects to login here.
-      if (!isGuest) await verifySession();
+    await form.run(async () => {
+      try {
+        // The orders endpoint treats a dead token as a guest, which would leave this signed-in form
+        // with no password field and no way forward. A refused token redirects to login here.
+        if (!isGuest) await verifySession();
 
-      const result = await placeOrder(buildOrderPayload(form, items, { isGuest }));
+        const coupon = quote.data.coupon ? appliedCoupon : '';
+        const result = await placeOrder(buildOrderPayload({ ...values, coupon_code: coupon }, items, { isGuest }));
 
-      onPlaced();
-      if (result.token) signInWith(result.customer, result.token);
-      clear();
-      navigate('/order-success', { state: { order: result.order } });
-    } catch (error) {
-      if (error.status === 401) return;
+        onPlaced();
+        if (result.token) signInWith(result.customer, result.token);
+        clear();
 
-      const hasFieldErrors = Object.keys(error.errors ?? {}).length > 0;
-      fail(error.errors ?? {}, hasFieldErrors ? null : error.message);
-      setSubmitting(false);
-    }
+        if (values.payment_method === CARD) navigate(`/orders/${result.order.id}/pay`, { replace: true });
+        else navigate('/order-success', { state: { order: result.order } });
+      } catch (error) {
+        if (error.errors?.cart) {
+          const { errors, cartMessage } = withoutCartErrors(error.errors);
+          form.fail(errors, cartMessage);
+          return;
+        }
+
+        throw error;
+      }
+    });
   };
 
   const textField = (name, label, props = {}) => (
@@ -150,25 +185,13 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
       name={name}
       label={label}
       required
-      value={name.startsWith(PAYMENT_PREFIX) ? form.payment[name.slice(PAYMENT_PREFIX.length)] : form[name]}
-      error={firstMessage(errors[name])}
+      value={fieldValue(values, name)}
+      error={form.errors[name]}
       onChange={handleChange}
       onBlur={handleBlur}
       {...props}
     />
   );
-
-  const summary = [
-    ...Object.entries(errors)
-      .filter(([, message]) => message)
-      .map(([name, message]) => ({
-        id: TEXT_FIELDS.has(name) ? fieldId(name) : undefined,
-        message: firstMessage(message),
-      })),
-    ...(formError ? [{ message: formError }] : []),
-  ];
-
-  const deliveryOptions = quote.data?.delivery_options ?? DELIVERY_METHODS;
 
   return (
     <div className="gutter py-8 lg:py-12">
@@ -176,10 +199,12 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
 
       <div className="mt-8 grid gap-12 lg:grid-cols-[1fr_24rem]">
         <form noValidate onSubmit={handleSubmit} className="max-w-2xl space-y-10">
-          {failedSubmits > 0 && summary.length > 0 && <ErrorSummary errors={summary} focusKey={failedSubmits} />}
+          {form.failedSubmits > 0 && form.summary.length > 0 && (
+            <ErrorSummary errors={form.summary} focusKey={form.failedSubmits} />
+          )}
 
           <p className="text-stone">
-            Wszystkie pola są wymagane.
+            Wszystkie pola są wymagane, chyba że opis mówi inaczej.
             {isGuest && (
               <>
                 {' '}
@@ -198,14 +223,14 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
                 label="Klient indywidualny"
                 name="customer_type"
                 value="individual"
-                checked={form.customer_type === 'individual'}
+                checked={values.customer_type === 'individual'}
                 onChange={handleChange}
               />
               <Radio
                 label="Firma"
                 name="customer_type"
                 value="company"
-                checked={form.customer_type === 'company'}
+                checked={values.customer_type === 'company'}
                 onChange={handleChange}
               />
             </div>
@@ -224,7 +249,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
                 {textField('last_name', 'Nazwisko', { autoComplete: 'family-name', maxLength: 255 })}
               </div>
               {textField('phone', 'Telefon', { type: 'tel', autoComplete: 'tel', maxLength: 20 })}
-              {form.customer_type === 'company' && (
+              {values.customer_type === 'company' && (
                 <div className={ROW}>
                   {textField('company_name', 'Nazwa firmy', { autoComplete: 'organization', maxLength: 255 })}
                   {textField('nip', 'NIP', { inputMode: 'numeric', maxLength: 20 })}
@@ -243,27 +268,73 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
               </div>
               {textField('country', 'Kraj', { autoComplete: 'country-name', maxLength: 255 })}
             </div>
+            <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                className="size-5 accent-pine"
+                checked={values.separate_shipping}
+                onChange={(event) => setValues((current) => ({ ...current, separate_shipping: event.target.checked }))}
+              />
+              Dostawa na inny adres
+            </label>
+            {values.separate_shipping && (
+              <div className="mt-4 space-y-5">
+                <div className={ROW}>
+                  {textField('shipping.first_name', 'Imię odbiorcy', { autoComplete: 'shipping given-name', maxLength: 255 })}
+                  {textField('shipping.last_name', 'Nazwisko odbiorcy', { autoComplete: 'shipping family-name', maxLength: 255 })}
+                </div>
+                {textField('shipping.company_name', 'Firma (opcjonalnie)', {
+                  autoComplete: 'shipping organization',
+                  maxLength: 255,
+                  required: false,
+                })}
+                {textField('shipping.address', 'Ulica i numer dostawy', { autoComplete: 'shipping street-address', maxLength: 255 })}
+                <div className={ROW}>
+                  {textField('shipping.postal_code', 'Kod pocztowy dostawy', { autoComplete: 'shipping postal-code', maxLength: 10 })}
+                  {textField('shipping.city', 'Miasto dostawy', { autoComplete: 'shipping address-level2', maxLength: 255 })}
+                </div>
+                {textField('shipping.country', 'Kraj dostawy', { autoComplete: 'shipping country-name', maxLength: 255 })}
+              </div>
+            )}
           </fieldset>
 
           <fieldset className={SECTION}>
             <legend className={LEGEND}>Dostawa</legend>
-            {deliveryOptions.map((method) => (
+            {!quote.data && !quote.error && <Skeleton className="h-33 max-w-md" />}
+            {quote.data?.delivery_options.map((method) => (
               <Radio
                 key={method.value}
                 label={method.label}
                 aside={deliveryPriceText(method.price)}
                 name="delivery_method"
                 value={method.value}
-                checked={form.delivery_method === method.value}
+                checked={values.delivery_method === method.value}
                 onChange={handleDelivery}
               />
             ))}
+            {values.delivery_method === PICKUP_POINT && (
+              <Select
+                id={fieldId('pickup_point')}
+                className="mt-3"
+                label="Paczkomat"
+                name="pickup_point"
+                required
+                options={[
+                  { value: '', label: 'Wybierz paczkomat' },
+                  ...pickupPoints.map((point) => ({ value: point.code, label: point.address })),
+                ]}
+                value={values.pickup_point}
+                error={form.errors.pickup_point}
+                onChange={handleChange}
+                onBlur={handleBlur}
+              />
+            )}
           </fieldset>
 
           <fieldset className={SECTION}>
             <legend className={LEGEND}>Płatność</legend>
             {PAYMENT_METHODS.map((method) => {
-              const unavailable = method.value === CASH && form.delivery_method !== STORE_PICKUP;
+              const unavailable = method.value === CASH && values.delivery_method !== STORE_PICKUP;
 
               return (
                 <Radio
@@ -273,58 +344,58 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
                   disabled={unavailable}
                   name="payment_method"
                   value={method.value}
-                  checked={form.payment_method === method.value}
+                  checked={values.payment_method === method.value}
                   onChange={handleChange}
                 />
               );
             })}
+            {values.payment_method === CARD && (
+              <p className="mt-2 max-w-prose text-stone">Dane karty podasz w następnym kroku.</p>
+            )}
+          </fieldset>
 
-            {form.payment_method === 'card' && (
-              <div className="mt-4 space-y-5">
-                {textField('payment.card_number', 'Numer karty', {
-                  autoComplete: 'off',
-                  inputMode: 'numeric',
-                  maxLength: 23,
-                  spellCheck: false,
-                  onChange: (event) => updateField('payment.card_number', formatCardNumber(event.target.value)),
-                })}
-                {textField('payment.card_name', 'Imię i nazwisko z karty', {
-                  autoComplete: 'off',
-                  maxLength: 255,
-                  spellCheck: false,
-                })}
-                <div className={ROW}>
-                  {textField('payment.expiry_date', 'Data ważności', {
-                    autoComplete: 'off',
-                    inputMode: 'numeric',
-                    placeholder: 'MM/RR',
-                    maxLength: 5,
-                    onChange: (event) => updateField('payment.expiry_date', formatExpiry(event.target.value)),
-                  })}
-                  {textField('payment.cvv', 'CVV', {
-                    type: 'password',
-                    autoComplete: 'off',
-                    inputMode: 'numeric',
-                    maxLength: 4,
-                  })}
-                </div>
-              </div>
+          <fieldset className={SECTION}>
+            <legend className={LEGEND}>Kod rabatowy</legend>
+            <div className="flex flex-wrap items-end gap-3">
+              {textField('coupon_code', 'Kod (opcjonalnie)', {
+                required: false,
+                maxLength: 64,
+                autoComplete: 'off',
+                className: 'min-w-48 grow sm:max-w-xs',
+                onBlur: undefined,
+                error: form.errors.coupon_code ?? couponError,
+              })}
+              <Button
+                variant="secondary"
+                className={couponError || form.errors.coupon_code ? 'mb-6' : ''}
+                onClick={applyCoupon}
+              >
+                Zastosuj kod
+              </Button>
+            </div>
+            {quote.data?.coupon && (
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 text-pine">
+                Kod zastosowany: {quote.data.coupon.label}
+                <Button variant="plain" onClick={removeCoupon}>
+                  Usuń kod
+                </Button>
+              </p>
             )}
           </fieldset>
 
           <div>
-            {/* The summary sits below the form on small screens, and the total must be seen before paying. */}
+            {/* The summary sits below the form on small screens, and the total must be seen before ordering. */}
             <p className="mb-3 flex justify-between gap-4 text-xl font-semibold lg:hidden">
               <span>Razem</span>
               <span>{formatPrice(quote.data?.total)}</span>
             </p>
-            <Button type="submit" loading={submitting} className="w-full sm:w-auto">
+            <Button type="submit" loading={form.submitting} className="w-full sm:w-auto">
               Złóż zamówienie
             </Button>
           </div>
         </form>
 
-        <CheckoutSummary items={items} quote={quote} deliveryMethod={form.delivery_method} />
+        <CheckoutSummary items={items} quote={quote} />
       </div>
     </div>
   );

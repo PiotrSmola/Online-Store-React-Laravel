@@ -1,24 +1,87 @@
+import { useState } from 'react';
+import PropTypes from 'prop-types';
 import { useParams } from 'react-router';
+import { useToast } from '../../Context/useToast';
 import { useOrder } from '../../hooks/useOrders';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { saveFile } from '../../lib/api';
+import { canCancelOrder, canPayOrder, cancelOrder, downloadInvoice, hasInvoice } from '../../lib/orders';
 import Button, { ButtonLink } from '../ui/Button';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
 import PageHeading from '../ui/PageHeading';
 import Skeleton from '../ui/Skeleton';
-import { OrderFacts, OrderItems, OrderMeta, OrderTotals } from './OrderParts';
+import { OrderFacts, OrderHistory, OrderItems, OrderMeta, OrderTotals } from './OrderParts';
 
-function OrderView({ order }) {
+function OrderView({ initialOrder }) {
+  const [order, setOrder] = useState(initialOrder);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const toast = useToast();
+
+  const handleCancel = async () => {
+    setConfirmingCancel(false);
+    setBusy('cancel');
+
+    try {
+      setOrder(await cancelOrder(order.id));
+      toast.success('Zamówienie zostało anulowane');
+    } catch (error) {
+      if (error.status !== 401) toast.error(error.errors?.status?.[0] ?? error.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleInvoice = async () => {
+    setBusy('invoice');
+
+    try {
+      saveFile(await downloadInvoice(order.id));
+    } catch (error) {
+      if (error.status !== 401) toast.error(error.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <>
       <PageHeading documentTitle={`Zamówienie ${order.order_number}`}>{`Zamówienie ${order.order_number}`}</PageHeading>
       <OrderMeta order={order} />
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        {canPayOrder(order) && <ButtonLink to={`/orders/${order.id}/pay`}>Zapłać za zamówienie</ButtonLink>}
+        {hasInvoice(order) && (
+          <Button variant="secondary" loading={busy === 'invoice'} onClick={handleInvoice}>
+            Pobierz fakturę
+          </Button>
+        )}
+        {canCancelOrder(order) && (
+          <Button variant="secondary" loading={busy === 'cancel'} onClick={() => setConfirmingCancel(true)}>
+            Anuluj zamówienie
+          </Button>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Anulować zamówienie?"
+        text="Tej operacji nie można cofnąć."
+        confirmLabel="Anuluj zamówienie"
+        onConfirm={handleCancel}
+        onCancel={() => setConfirmingCancel(false)}
+      />
 
       <div className="mt-10">
         <OrderFacts order={order} />
       </div>
 
       <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_24rem]">
-        <OrderItems items={order.items} />
+        <div className="space-y-10">
+          <OrderItems items={order.items} />
+          <OrderHistory events={order.statusEvents} />
+        </div>
         <div className="lg:self-start">
           <OrderTotals order={order} />
         </div>
@@ -34,7 +97,9 @@ function OrderView({ order }) {
   );
 }
 
-OrderView.propTypes = OrderTotals.propTypes;
+OrderView.propTypes = {
+  initialOrder: PropTypes.object.isRequired,
+};
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -52,7 +117,7 @@ export default function OrderDetail() {
           <Skeleton className="mt-10 h-48" />
         </>
       )}
-      {order && <OrderView order={order} />}
+      {order && <OrderView key={order.id} initialOrder={order} />}
       {isMissing && (
         <EmptyState
           isPage

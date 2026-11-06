@@ -87,7 +87,11 @@ export default function Cart() {
               <span className="text-xl font-semibold">{formatPrice(quote?.subtotal)}</span>
             </p>
           )}
-          <p className="mt-1 text-sm text-stone">Koszt dostawy zobaczysz przy zamówieniu.</p>
+          <p className="mt-1 text-sm text-stone">
+            {quote?.free_delivery_missing > 0
+              ? `Do darmowej dostawy brakuje ${formatPrice(quote.free_delivery_missing)}.`
+              : 'Masz darmową dostawę.'}
+          </p>
           {hasUnavailable && <p className="mt-4 text-ember">Usuń niedostępne produkty, aby przejść dalej.</p>}
 
           {!hasUnavailable && (

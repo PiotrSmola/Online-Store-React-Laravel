@@ -2,16 +2,17 @@ import PropTypes from 'prop-types';
 import { lineKey } from '../../lib/cart';
 import { formatPrice } from '../../lib/format';
 import { optionsText } from '../../lib/product';
-import { deliveryLabel } from '../../lib/shopConfig';
 import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ProductImage from './ProductImage';
+
+const THUMB_SIZES = '3rem';
 
 function SummaryLine({ item, line = null }) {
   return (
     <li className="grid grid-cols-[3rem_1fr] gap-x-3">
       {line?.product ? (
-        <ProductImage image={line.product.images?.[0]} alt="" thumbnail priority="eager" />
+        <ProductImage image={line.product.images?.[0]} alt="" thumbnail priority="eager" sizes={THUMB_SIZES} />
       ) : (
         <Skeleton className="aspect-[3/4] w-full bg-white" />
       )}
@@ -31,8 +32,16 @@ SummaryLine.propTypes = {
   line: PropTypes.object,
 };
 
-export default function CheckoutSummary({ items, quote, deliveryMethod }) {
+function freeDeliveryText(quote) {
+  if (!quote) return '';
+  return quote.free_delivery_missing > 0
+    ? `Do darmowej dostawy brakuje ${formatPrice(quote.free_delivery_missing)}.`
+    : 'Masz darmową dostawę.';
+}
+
+export default function CheckoutSummary({ items, quote }) {
   const { data, error, reload } = quote;
+  const delivery = data?.delivery_price;
 
   return (
     <aside aria-labelledby="checkout-summary" className="rounded-control bg-mist p-6 lg:sticky lg:top-8 lg:self-start">
@@ -59,20 +68,29 @@ export default function CheckoutSummary({ items, quote, deliveryMethod }) {
         </div>
       )}
 
-      <dl aria-live="polite" className="mt-6 space-y-1">
-        <div className="flex justify-between gap-4">
-          <dt>Wartość produktów</dt>
-          <dd>{formatPrice(data?.subtotal)}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt>Dostawa: {deliveryLabel(deliveryMethod)}</dt>
-          <dd>{data?.delivery_price === 0 ? 'Bezpłatnie' : formatPrice(data?.delivery_price)}</dd>
-        </div>
-        <div className="flex justify-between gap-4 pt-2 text-xl font-semibold">
-          <dt>Razem</dt>
-          <dd>{formatPrice(data?.total)}</dd>
-        </div>
-      </dl>
+      <div aria-live="polite">
+        <dl className="mt-6 space-y-1">
+          <div className="flex justify-between gap-4">
+            <dt>Wartość produktów</dt>
+            <dd>{formatPrice(data?.subtotal)}</dd>
+          </div>
+          {data?.discount > 0 && (
+            <div className="flex justify-between gap-4">
+              <dt>Rabat{data.coupon ? `: ${data.coupon.label}` : ''}</dt>
+              <dd>-{formatPrice(data.discount)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between gap-4">
+            <dt>Dostawa</dt>
+            <dd>{delivery === 0 ? 'Bezpłatnie' : formatPrice(delivery)}</dd>
+          </div>
+          <div className="flex justify-between gap-4 pt-2 text-xl font-semibold">
+            <dt>Razem</dt>
+            <dd>{formatPrice(data?.total)}</dd>
+          </div>
+        </dl>
+        <p className="mt-2 min-h-5 text-sm text-stone">{freeDeliveryText(data)}</p>
+      </div>
     </aside>
   );
 }
@@ -84,5 +102,4 @@ CheckoutSummary.propTypes = {
     error: PropTypes.object,
     reload: PropTypes.func.isRequired,
   }).isRequired,
-  deliveryMethod: PropTypes.string.isRequired,
 };
