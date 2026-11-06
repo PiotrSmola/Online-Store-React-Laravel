@@ -21,6 +21,9 @@ const FIELD_IDS = {
   cvv: 'card-cvv',
 };
 
+// A password field would be offered for saving, and a CVV must never reach a password manager.
+const MASKED = { WebkitTextSecurity: 'disc' };
+
 /**
  * The simulated card form. The card stays in this component's state: nothing is logged or stored,
  * only the last four digits are sent, and the fields are cleared after every attempt.
@@ -100,11 +103,12 @@ function CardForm({ order }) {
         <Field
           id={FIELD_IDS.cvv}
           label="CVV"
-          type="password"
           required
           autoComplete="off"
           inputMode="numeric"
           maxLength={4}
+          spellCheck={false}
+          style={MASKED}
           value={card.cvv}
           error={form.errors.cvv}
           onChange={(event) => update('cvv', event.target.value.replace(/\D/g, ''))}
