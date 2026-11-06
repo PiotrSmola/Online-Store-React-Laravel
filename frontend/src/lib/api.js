@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { safeStorage } from './storage';
 
 const TOKEN_KEY = 'customerToken';
 const NETWORK_MESSAGE = 'Nie udało się połączyć ze sklepem. Sprawdź połączenie i spróbuj ponownie.';
@@ -21,20 +22,12 @@ export function isAbortError(error) {
 }
 
 export function getToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  return safeStorage.getItem(TOKEN_KEY);
 }
 
 export function storeToken(token) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // Without storage the session lasts until the next reload.
-  }
+  if (token) safeStorage.setItem(TOKEN_KEY, token);
+  else safeStorage.removeItem(TOKEN_KEY);
 }
 
 /** Runs the listener when a signed-in request is refused. Returns the unsubscribe function. */

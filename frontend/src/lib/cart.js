@@ -61,18 +61,23 @@ export function normalizeCart(stored) {
     .reduce(addLine, []);
 }
 
-export function readCart(storage) {
+function parseCart(json) {
   try {
-    return normalizeCart(JSON.parse(storage.getItem(STORAGE_KEY)));
+    return normalizeCart(JSON.parse(json));
   } catch {
     return [];
   }
 }
 
+export function readCart(storage) {
+  return parseCart(storage.getItem(STORAGE_KEY));
+}
+
 export function writeCart(storage, items) {
-  try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // A full or blocked storage keeps the cart in memory until the next reload.
-  }
+  storage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+/** The cart another tab saved, or null for any other key. A null key means storage was cleared. */
+export function cartFromStorageEvent({ key, newValue }) {
+  return key === STORAGE_KEY || key === null ? parseCart(newValue) : null;
 }

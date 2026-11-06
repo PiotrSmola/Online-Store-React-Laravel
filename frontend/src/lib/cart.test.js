@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_QUANTITY,
   addLine,
+  cartFromStorageEvent,
   clampQuantity,
   countItems,
   lineKey,
@@ -24,9 +25,17 @@ function memoryStorage(initial = {}) {
 }
 
 describe('lineKey', () => {
-  it('matches the key of the cart quote', () => {
+  it('combines product, size and color', () => {
     expect(lineKey(shirt)).toBe('1:M:Czarny');
+  });
+
+  it('leaves missing options empty', () => {
     expect(lineKey(belt)).toBe('2::');
+  });
+
+  it('gives each variant of a product its own key', () => {
+    expect(lineKey(shirt)).not.toBe(lineKey({ ...shirt, size: 'L' }));
+    expect(lineKey(shirt)).not.toBe(lineKey({ ...shirt, color: 'Biały' }));
   });
 });
 
@@ -140,12 +149,34 @@ describe('storage', () => {
     expect(readCart(memoryStorage())).toEqual([]);
   });
 
-  it('keeps working when storage refuses a write', () => {
-    const storage = {
-      setItem: () => {
-        throw new Error('full');
-      },
-    };
-    expect(() => writeCart(storage, [shirt])).not.toThrow();
+  it('writes the exact text it would read back, so a second tab fires no further event', () => {
+    const storage = memoryStorage();
+    writeCart(storage, [shirt, belt]);
+    const saved = storage.getItem('cart');
+
+    writeCart(storage, cartFromStorageEvent({ key: 'cart', newValue: saved }));
+    expect(storage.getItem('cart')).toBe(saved);
+  });
+});
+
+describe('cartFromStorageEvent', () => {
+  it('reads the cart another tab saved', () => {
+    expect(cartFromStorageEvent({ key: 'cart', newValue: JSON.stringify([shirt]) })).toEqual([shirt]);
+  });
+
+  it('ignores other keys', () => {
+    expect(cartFromStorageEvent({ key: 'customerToken', newValue: 'abc' })).toBeNull();
+  });
+
+  it('empties the cart when another tab removes it', () => {
+    expect(cartFromStorageEvent({ key: 'cart', newValue: null })).toEqual([]);
+  });
+
+  it('empties the cart when storage is cleared', () => {
+    expect(cartFromStorageEvent({ key: null, newValue: null })).toEqual([]);
+  });
+
+  it('treats a broken value as an empty cart', () => {
+    expect(cartFromStorageEvent({ key: 'cart', newValue: '{not json' })).toEqual([]);
   });
 });
