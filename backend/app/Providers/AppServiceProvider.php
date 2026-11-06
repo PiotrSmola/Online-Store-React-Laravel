@@ -38,5 +38,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('orders', function (Request $request) use ($tooManyAttempts) {
             return Limit::perMinute(20)->by($request->ip())->response($tooManyAttempts);
         });
+
+        // The cart asks for a quote on every change. Only requests carrying a coupon can
+        // guess codes, so those have their own, tighter budget.
+        RateLimiter::for('quote', function (Request $request) use ($tooManyAttempts) {
+            return filled($request->input('coupon'))
+                ? Limit::perMinute(30)->by('coupon|' . $request->ip())->response($tooManyAttempts)
+                : Limit::perMinute(120)->by($request->ip())->response($tooManyAttempts);
+        });
     }
 }

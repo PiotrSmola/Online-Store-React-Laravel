@@ -3,14 +3,26 @@
 return [
 
     /*
-    | Delivery prices in PLN, by delivery method. The prices displayed in
-    | frontend/src/Components/Shop/Checkout.jsx have to match these values.
+    | Delivery methods with their prices in PLN. The server is the only source of
+    | prices: the frontend shows what POST /api/cart/quote returns.
     */
 
-    'delivery_prices' => [
-        'courier' => 15.99,
-        'pickup_point' => 12.99,
-        'store_pickup' => 0,
+    'delivery_methods' => [
+        'courier' => ['label' => 'Kurier', 'price' => 15.99],
+        'pickup_point' => ['label' => 'Paczkomat', 'price' => 12.99],
+        'store_pickup' => ['label' => 'Odbiór w sklepie', 'price' => 0],
     ],
+
+    // Checked against the subtotal minus the discount.
+    'free_delivery_from' => 300,
+
+    'pickup_points' => [
+        ['code' => 'WAW01M', 'address' => 'ul. Lipowa 12, 00-101 Warszawa'],
+        ['code' => 'KRK04A', 'address' => 'ul. Ogrodowa 7, 30-002 Kraków'],
+        ['code' => 'GDA02B', 'address' => 'ul. Morska 21, 80-103 Gdańsk'],
+        ['code' => 'WRO09C', 'address' => 'ul. Słoneczna 3, 50-104 Wrocław'],
+    ],
+
+    'bank_account' => '12 3456 7890 1234 5678 9012 3456',
 
 ];

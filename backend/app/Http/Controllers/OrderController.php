@@ -39,7 +39,7 @@ class OrderController extends Controller
                 'company_name' => 'nullable|string|max:255',
                 'nip' => 'nullable|string|max:20',
                 'payment_method' => 'required|in:card,transfer,cash',
-                'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_prices')))],
+                'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_methods')))],
                 'cart_items' => 'required|array|min:1',
                 'cart_items.*.product_id' => 'required|integer|exists:products,id',
                 'cart_items.*.quantity' => 'required|integer|min:1|max:99',
@@ -92,7 +92,7 @@ class OrderController extends Controller
                 }
 
                 $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
-                $deliveryPrice = config('shop.delivery_prices')[$request->delivery_method];
+                $deliveryPrice = config('shop.delivery_methods')[$request->delivery_method]['price'];
                 $totalAmount = round($itemsTotal + $deliveryPrice, 2);
 
                 $paymentDetails = [
