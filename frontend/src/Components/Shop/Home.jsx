@@ -89,7 +89,7 @@ export default function Home() {
         width="1200"
         height="800"
         fetchPriority="high"
-        className="aspect-[3/2] w-full bg-mist object-cover object-[70%_30%] lg:aspect-[21/9]"
+        className="mx-auto aspect-[3/2] w-full max-w-[1500px] bg-mist object-cover object-[70%_30%] lg:aspect-[21/9]"
       />
 
       <div className="gutter pt-8 pb-16 lg:pt-12">
