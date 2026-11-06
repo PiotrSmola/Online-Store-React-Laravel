@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -52,24 +52,16 @@ class OrderController extends Controller
             }
 
             Log::info('Dane po walidacji:', $validatedData);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Błędy walidacji:', $e->errors());
-            return response()->json([
-                'message' => 'Błędy walidacji',
-                'errors' => $e->errors()
-            ], 422);
-        }
 
-        return DB::transaction(function () use ($request) {
-            try {
+            // Failure paths must throw: a response returned from this closure would commit.
+            return DB::transaction(function () use ($request) {
                 $customer = Customer::where('email', $request->email)->first();
 
                 if (!$customer) {
                     if (!$request->password) {
-                        return response()->json([
-                            'message' => 'Hasło jest wymagane dla nowego klienta',
-                            'errors' => ['password' => ['Hasło jest wymagane']]
-                        ], 422);
+                        throw ValidationException::withMessages([
+                            'password' => ['Hasło jest wymagane'],
+                        ]);
                     }
 
                     $customer = Customer::create([
@@ -187,17 +179,40 @@ class OrderController extends Controller
                     'token' => $token,
                     'message' => 'Zamówienie zostało złożone pomyślnie!'
                 ]);
-            } catch (\Exception $e) {
-                Log::error('Błąd podczas tworzenia zamówienia:', [
-                    'message' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
+            });
+        } catch (ValidationException $e) {
+            Log::error('Błędy walidacji:', $e->errors());
+            return response()->json([
+                'message' => 'Błędy walidacji',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Order creation failed', $this->safeExceptionContext($e));
 
-                return response()->json([
-                    'message' => 'Błąd podczas tworzenia zamówienia: ' . $e->getMessage()
-                ], 500);
+            return response()->json([
+                'message' => 'Nie udało się złożyć zamówienia. Spróbuj ponownie później.'
+            ], 500);
+        }
+    }
+
+    // Exception messages can embed SQL bindings (emails, password hashes) and trace
+    // strings embed call arguments, so only the type and code locations are logged.
+    private function safeExceptionContext(\Throwable $e): array
+    {
+        $appFrames = [];
+
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['file']) && !str_contains($frame['file'], DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) {
+                $appFrames[] = $frame['file'] . ':' . ($frame['line'] ?? '?');
             }
-        });
+        }
+
+        return [
+            'exception_class' => $e::class,
+            'code' => $e->getCode(),
+            'location' => $e->getFile() . ':' . $e->getLine(),
+            'app_frames' => array_slice($appFrames, 0, 10),
+        ];
     }
 
     // Walidacja płatności kartą (algorytm Luhn)
