@@ -136,7 +136,7 @@ export default function Contact() {
             <address className="mt-2 not-italic">
               <p>{contact.address}</p>
               <p>
-                <a href={`mailto:${contact.email}`} className="text-pine underline underline-offset-4">
+                <a href={`mailto:${contact.email}`} className="inline-block min-h-6 text-pine underline underline-offset-4">
                   {contact.email}
                 </a>
               </p>

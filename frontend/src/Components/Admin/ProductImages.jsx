@@ -109,7 +109,7 @@ export default function ProductImages({ productId, initialImages, name }) {
           type="file"
           accept={ACCEPTED}
           aria-describedby={`${inputId}-hint`}
-          className="mt-1 block min-h-11 w-full cursor-pointer py-2"
+          className="mt-1 block w-full cursor-pointer text-ink file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-control file:border file:border-pine file:bg-white file:px-4 file:font-semibold file:text-pine hover:file:bg-mist"
           onChange={handleFile}
         />
         <p id={`${inputId}-hint`} className={HINT}>

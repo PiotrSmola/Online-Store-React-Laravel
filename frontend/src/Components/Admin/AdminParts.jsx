@@ -10,14 +10,14 @@ import Spinner from '../ui/Spinner';
 
 export const TH = 'pb-2 pr-6 text-left text-sm font-semibold text-stone';
 export const TD = 'py-2 pr-6 align-top';
-export const LINK = 'text-pine underline underline-offset-4';
+export const LINK = 'inline-block min-h-6 text-pine underline underline-offset-4';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
 /** A wide table scrolls inside this box, so the page itself never scrolls sideways. */
 export function TableRegion({ label, children }) {
   return (
-    <div role="region" aria-label={label} tabIndex={0} className="overflow-x-auto">
+    <div role="region" aria-label={label} tabIndex={0} className="relative overflow-x-auto">
       <table className="w-full min-w-xl border-collapse">{children}</table>
     </div>
   );

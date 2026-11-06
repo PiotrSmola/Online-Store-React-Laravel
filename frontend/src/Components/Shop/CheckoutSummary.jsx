@@ -76,7 +76,7 @@ export default function CheckoutSummary({ items, quote }) {
           </div>
           {data?.discount > 0 && (
             <div className="flex justify-between gap-4">
-              <dt>Rabat{data.coupon ? `: ${data.coupon.label}` : ''}</dt>
+              <dt>{data.coupon?.label ?? 'Rabat'}</dt>
               <dd>-{formatPrice(data.discount)}</dd>
             </div>
           )}
