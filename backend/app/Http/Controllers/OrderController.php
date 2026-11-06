@@ -38,7 +38,7 @@ class OrderController extends Controller
                 'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_prices')))],
                 'cart_items' => 'required|array|min:1',
                 'cart_items.*.product_id' => 'required|integer|exists:products,id',
-                'cart_items.*.quantity' => 'required|integer|min:1',
+                'cart_items.*.quantity' => 'required|integer|min:1|max:99',
                 'cart_items.*.selected_size' => 'nullable|string',
                 'cart_items.*.selected_color' => 'nullable|string',
                 'payment' => 'required|array',
@@ -46,6 +46,8 @@ class OrderController extends Controller
                 'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
                 'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
                 'payment.cvv' => 'required_if:payment_method,card|nullable|string',
+            ], [
+                'cart_items.*.quantity.max' => 'Maksymalna ilość jednego produktu to 99',
             ]);
 
             if ($request->payment_method === 'card') {
