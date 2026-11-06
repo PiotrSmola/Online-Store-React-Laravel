@@ -90,8 +90,9 @@ class ProductImageService
         }
 
         [$width, $height, $type] = $info;
+        $orientation = $this->orientationOf($source, $type);
 
-        if ($width * $height > self::MAX_PIXELS || !$this->fitsInMemory($width, $height)) {
+        if ($width * $height > self::MAX_PIXELS || !$this->fitsInMemory($width, $height, $orientation)) {
             return false;
         }
 
@@ -100,6 +101,11 @@ class ProductImageService
         if (!$image) {
             return false;
         }
+
+        // Catalog photos reach this point with their EXIF, uploads were turned before storing.
+        $image = $this->upright($image, $orientation);
+        $width = imagesx($image);
+        $height = imagesy($image);
 
         $targetWidth = min($width, self::THUMBNAIL_WIDTH);
         $targetHeight = max(1, (int) round($height * $targetWidth / $width));
@@ -123,11 +129,57 @@ class ProductImageService
         return rename($target . '.tmp', $target);
     }
 
-    private function fitsInMemory(int $width, int $height): bool
+    /**
+     * The EXIF orientation of a JPEG, 1 (as stored) when it has none. Without the exif
+     * extension a sideways phone photo simply stays sideways; nothing else breaks.
+     */
+    public function orientationOf(string $path, int $type): int
+    {
+        if ($type !== IMAGETYPE_JPEG || !function_exists('exif_read_data')) {
+            return 1;
+        }
+
+        $orientation = (int) ((@exif_read_data($path) ?: [])['Orientation'] ?? 1);
+
+        return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
+    }
+
+    /** Applies an EXIF orientation to the pixels, since re-encoding drops the tag that described it. */
+    private function upright(\GdImage $image, int $orientation): \GdImage
+    {
+        $angle = match ($orientation) {
+            3 => 180,
+            5, 6 => -90,
+            7, 8 => 90,
+            default => 0,
+        };
+
+        // Rebinding frees the original as soon as its copy exists.
+        if ($angle !== 0) {
+            $image = imagerotate($image, $angle, 0);
+        }
+
+        $flip = match ($orientation) {
+            2, 5, 7 => IMG_FLIP_HORIZONTAL,
+            4 => IMG_FLIP_VERTICAL,
+            default => null,
+        };
+
+        if ($flip !== null) {
+            imageflip($image, $flip);
+        }
+
+        return $image;
+    }
+
+    private function fitsInMemory(int $width, int $height, int $orientation = 1): bool
     {
         $limit = ini_parse_quantity(ini_get('memory_limit'));
 
-        return $limit <= 0 || $width * $height * self::BYTES_PER_PIXEL < $limit - memory_get_usage();
+        // Turning needs the old and the new bitmap at once; flipping works in place.
+        $bitmaps = in_array($orientation, [1, 2, 4], true) ? 1 : 2;
+
+        return $limit <= 0 || $width * $height * self::BYTES_PER_PIXEL * $bitmaps < $limit - memory_get_usage();
     }
 
     private function encode(\GdImage $image, int $type, ?string $target = null): void
@@ -169,8 +221,9 @@ class ProductImageService
         }
 
         [$width, $height] = getimagesize($path);
+        $orientation = $this->orientationOf($path, $type);
 
-        if (!$this->fitsInMemory($width, $height)) {
+        if (!$this->fitsInMemory($width, $height, $orientation)) {
             throw ValidationException::withMessages(['image' => ['Obraz ma zbyt duże wymiary.']]);
         }
 
@@ -180,6 +233,7 @@ class ProductImageService
             throw ValidationException::withMessages(['image' => ['Nie udało się odczytać obrazu.']]);
         }
 
+        $image = $this->upright($image, $orientation);
         imagesavealpha($image, true);
 
         ob_start();

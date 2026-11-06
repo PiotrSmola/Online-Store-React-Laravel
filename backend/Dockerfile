@@ -4,7 +4,7 @@ FROM php:8.3-apache
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git unzip libzip-dev libjpeg62-turbo-dev libpng-dev libwebp-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install pdo_mysql zip bcmath gd \
+    && docker-php-ext-install pdo_mysql zip bcmath gd exif \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-shop.ini

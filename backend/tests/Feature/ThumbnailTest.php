@@ -9,6 +9,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RequiresFunction;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use Tests\Feature\Concerns\BuildsAdmins;
 use Tests\Feature\Concerns\BuildsOrders;
@@ -62,6 +63,103 @@ class ThumbnailTest extends TestCase
             ['image' => UploadedFile::fake()->createWithContent($name, $bytes)],
             ['Accept' => 'application/json']
         );
+    }
+
+    /** A landscape picture with a red top left corner on a blue background. */
+    private function markedPng(int $width = 40, int $height = 20): string
+    {
+        $image = imagecreatetruecolor($width, $height);
+        imagefill($image, 0, 0, imagecolorallocate($image, 0, 0, 255));
+        imagefilledrectangle($image, 0, 0, 9, 4, imagecolorallocate($image, 255, 0, 0));
+
+        ob_start();
+        imagepng($image);
+
+        return ob_get_clean();
+    }
+
+    /** Puts an Orientation tag into a JPEG, the way a phone camera does. */
+    private function withExifOrientation(string $jpeg, int $orientation): string
+    {
+        $tiff = "II*\0" . pack('V', 8) . pack('v', 1) . pack('vvVvv', 0x0112, 3, 1, $orientation, 0) . pack('V', 0);
+        $app1 = "Exif\0\0" . $tiff;
+
+        return substr($jpeg, 0, 2) . "\xFF\xE1" . pack('n', strlen($app1) + 2) . $app1 . substr($jpeg, 2);
+    }
+
+    public static function orientations(): array
+    {
+        return [
+            'as stored' => [1, 40, 20, 'left', 'top'],
+            'mirrored' => [2, 40, 20, 'right', 'top'],
+            'upside down' => [3, 40, 20, 'right', 'bottom'],
+            'flipped' => [4, 40, 20, 'left', 'bottom'],
+            'transposed' => [5, 20, 40, 'left', 'top'],
+            'phone held upright' => [6, 20, 40, 'right', 'top'],
+            'transversed' => [7, 20, 40, 'right', 'bottom'],
+            'phone held the other way' => [8, 20, 40, 'left', 'bottom'],
+        ];
+    }
+
+    #[DataProvider('orientations')]
+    #[RequiresPhpExtension('gd')]
+    public function test_every_orientation_is_applied_before_encoding(int $orientation, int $width, int $height, string $side, string $edge): void
+    {
+        $this->partialMock(ProductImageService::class)->shouldReceive('orientationOf')->andReturn($orientation);
+
+        $path = $this->upload($this->createProduct(), 'photo.png', $this->markedPng())->assertCreated()->json('image_path');
+
+        $stored = imagecreatefromstring(Storage::disk('public')->get("products/{$path}"));
+        $this->assertSame([$width, $height], [imagesx($stored), imagesy($stored)]);
+
+        $x = $side === 'left' ? 1 : $width - 2;
+        $y = $edge === 'top' ? 1 : $height - 2;
+        $this->assertGreaterThan(200, (imagecolorat($stored, $x, $y) >> 16) & 0xFF, 'The red corner is not where it belongs.');
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_the_thumbnail_of_a_turned_upload_is_turned_only_once(): void
+    {
+        $this->partialMock(ProductImageService::class)->shouldReceive('orientationOf')->andReturn(6, 1);
+
+        $path = $this->upload($this->createProduct(), 'photo.png', $this->markedPng(1000, 500))->assertCreated()->json('image_path');
+
+        $this->assertSame([500, 1000], array_slice(getimagesize(Storage::disk('public')->path("products/{$path}")), 0, 2));
+        $this->assertSame([500, 1000], array_slice($this->thumbnailInfo($path), 0, 2));
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_a_bad_orientation_value_is_ignored(): void
+    {
+        $service = app(ProductImageService::class);
+        $this->storeOriginal('odd.png', $this->markedPng());
+
+        $this->assertSame(1, $service->orientationOf(Storage::disk('public')->path('products/odd.png'), IMAGETYPE_PNG));
+    }
+
+    #[RequiresPhpExtension('gd')]
+    #[RequiresFunction('exif_read_data')]
+    public function test_a_real_phone_photo_comes_out_upright_without_its_exif(): void
+    {
+        $photo = $this->withExifOrientation($this->imageBytes('jpg', 60, 30), 6);
+
+        $path = $this->upload($this->createProduct(), 'photo.jpg', $photo)->assertCreated()->json('image_path');
+
+        $stored = Storage::disk('public')->get("products/{$path}");
+        $this->assertSame([30, 60], array_slice(getimagesizefromstring($stored), 0, 2));
+        $this->assertStringNotContainsString('Exif', $stored);
+        $this->assertSame([30, 60], array_slice($this->thumbnailInfo($path), 0, 2));
+    }
+
+    #[RequiresPhpExtension('gd')]
+    #[RequiresFunction('exif_read_data')]
+    public function test_a_catalog_photo_gets_an_upright_thumbnail(): void
+    {
+        $this->storeOriginal('phone.jpg', $this->withExifOrientation($this->imageBytes('jpg', 1200, 600), 8));
+
+        $this->artisan('shop:thumbnails')->assertSuccessful();
+
+        $this->assertSame([600, 1200], array_slice($this->thumbnailInfo('phone.jpg'), 0, 2));
     }
 
     // Without GD
