@@ -79,10 +79,11 @@
   }
 }
 
+/* Caps content at 1500px while backgrounds such as the footer stay full width. */
 @utility gutter {
-  padding-inline: 1rem;
+  padding-inline: max(1rem, calc((100% - 1500px) / 2));
 
   @media (width >= 64rem) {
-    padding-inline: 2rem;
+    padding-inline: max(2rem, calc((100% - 1500px) / 2));
   }
 }
