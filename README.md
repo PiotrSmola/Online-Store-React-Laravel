@@ -1,34 +1,61 @@
-# Online-Store-React-Laravel
+# Online Store
 
-A full-stack e-commerce application built with **Laravel** (backend API) and **React** (frontend) featuring a searchable catalog with stock per variant, sale prices, saved carts, coupons, simulated card payments, PDF invoices, email notifications, a double opt-in newsletter, a contact form and an admin API.
+A full-stack clothing store with a Laravel 13 API and a React 19 frontend: a searchable catalog with stock per size and color, sale prices, saved carts, coupons, a simulated card payment, PDF invoices, transactional email, reviews from verified buyers and a complete admin panel. The interface is in Polish. This is a portfolio project meant to run locally, and the whole stack starts in Docker with one script.
 
-## 🚀 Features
+Want to see it without installing anything? Jump to the [interface preview](#interface-preview).
 
-### Backend (Laravel API)
-- **Catalog**: Search, filters, sorting and pagination, with stock kept per size and color variant, sale prices and new product flags
-- **Cart and pricing**: Saved carts, coupons, free delivery threshold; the server is the only source of prices
-- **Orders**: Locked stock handling, a status flow with history, cancellation that returns stock
-- **Simulated payment**: Card flow with test cards, no card data on the server
-- **Customer accounts**: Registration, login, password reset, profile, wishlist and verified buyer reviews, using Laravel Sanctum
-- **Admin API**: Dashboard numbers, products with variants and photos, orders, customers, coupons, review moderation, contact messages and newsletter subscribers
-- **Newsletter**: Double opt-in with an unsubscribe link in every message, and a CSV export of confirmed addresses. It collects subscribers only and does not send campaigns
-- **Contact form**: Stored for the admin panel and emailed to the shop address
-- **Email**: Queued order confirmations, status updates, password reset, newsletter confirmation and contact form messages
-- **Invoices**: PDF invoices with net, VAT and gross amounts
-- **Images**: Thumbnails 640 px wide, created on upload and by `php artisan shop:thumbnails`
-- **Data seeding**: Products, variants, coupons, demo customers and reviews from one Artisan command
+## Features
 
-### Frontend (React)
-- **Modern React**: Built with React 19 and React Router for navigation
-- **Product Browsing**: Category filtering, product details, and image galleries
-- **Shopping Cart**: Add/remove items with quantity management
-- **Checkout Process**: Multi-step checkout with customer information and payment
-- **Order History**: View past orders and order details
-- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+### Shop
+- **Catalog**: Search, sorting, filters for price, size and color kept in the URL, pagination, and pages for new products and sale items
+- **Product pages**: Photo gallery, stock shown per variant with unavailable combinations disabled, sale prices, related products
+- **Cart**: Saved to the account and merged at login, with prices and stock always taken from the server
+- **Checkout**: One page, for individuals and companies, with a separate delivery address, parcel locker selection, coupons and a free delivery threshold
+- **Reviews**: Only customers who bought a product can review it, and ratings are calculated from those reviews
+- **Wishlist**: Saved to the customer account
+- **Newsletter**: Double opt-in, with an unsubscribe link in every message
+- **Contact form**: Stored for the admin panel and sent to the shop address
 
-## 🐳 Quick Start with Docker (recommended)
+### Orders and Payment
+- **Simulated card payment**: A test payment screen with accepted and declined cards, and retries (see [Simulated Payment](#simulated-payment))
+- **Status flow**: Pending, processing, shipped, delivered or cancelled, with the full history visible on each order
+- **Stock handling**: Stock is taken in a locked transaction when an order is placed and returned when it is cancelled
+- **Unpaid orders**: Cancelled automatically after 48 hours, so nobody can hold stock without paying
+- **Invoices**: PDF invoices with net, VAT and gross amounts for paid orders
+- **Email**: Order confirmations, status updates, password reset, newsletter confirmation and contact messages, sent through a queue
 
-The only requirement is **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (or Docker Engine + Compose v2 on Linux). PHP, Composer, Node.js and MySQL run inside containers.
+### Admin Panel
+- **Overview**: Revenue, orders by status, low stock, unread messages and subscribers
+- **Products**: Create and edit products, variants, stock, sale prices, new product flags and photos
+- **Orders**: Filter by status, change status, confirm payments, download invoices
+- **Customers, coupons and messages**: Search customers, manage coupons, read contact messages
+- **Newsletter**: Subscriber list with a CSV export
+
+### Technical Highlights
+- **Server-side pricing**: One service calculates every total, so the browser never decides a price or a delivery cost
+- **Safe stock editing**: Admin stock changes are applied as a difference, so sales made while the form is open stay counted
+- **Image pipeline**: Uploads are checked by content, re-encoded and turned into 640 px thumbnails
+- **Performance**: Route-level code splitting, with the admin panel in a separate chunk that shoppers never download
+- **Accessibility**: Built to WCAG 2.2 AA, with keyboard flows and automated axe-core checks on every page
+- **Docker setup**: The setup script finds free ports, generates secrets and keeps them between runs
+
+## Technology Stack
+
+| Area | Technology |
+|------|------------|
+| Backend | PHP 8.3, Laravel 13, Laravel Sanctum, DomPDF |
+| Frontend | React 19, React Router 8, Vite 8, Tailwind CSS 4, lucide-react |
+| Database | MySQL 8.4 |
+| Infrastructure | Docker Compose, nginx, Apache, Mailpit |
+| Testing | PHPUnit 12, Vitest, Testing Library, ESLint |
+
+## Requirements
+
+**[Docker Desktop](https://www.docker.com/products/docker-desktop/)**, or Docker Engine with Compose v2 on Linux, is all you need. PHP, Composer, Node.js and MySQL run inside containers.
+
+Running without Docker needs PHP 8.3 with the `pdo_mysql`, `gd`, `exif`, `zip` and `bcmath` extensions, Composer, Node.js 22.22 or newer and MySQL 8.4.
+
+## Quick Start with Docker (recommended)
 
 ```bash
 git clone https://github.com/PiotrSmola/Online-Store-React-Laravel.git
@@ -39,305 +66,253 @@ Then run the setup script:
 
 | System | Command |
 |--------|---------|
-| Windows | double-click `setup.cmd` or run `powershell -ExecutionPolicy Bypass -File .\setup.ps1` |
-| Linux / macOS / Git Bash | `./setup.sh` |
+| Windows | Double-click `setup.cmd`, or run `powershell -ExecutionPolicy Bypass -File .\setup.ps1` |
+| Linux, macOS, Git Bash | `./setup.sh` |
 
 The script:
-1. checks that Docker is installed and running,
-2. finds free ports — if a default port is already taken, it **uses the next free one** (it never stops anything that is already running),
-3. generates a root `.env` file (Laravel `APP_KEY`, database passwords, admin password) on the first run and reuses it later,
-4. builds the images, starts the containers, runs migrations, seeds the shop, creates the admin account and waits until the shop responds,
-5. prints the URLs and the admin login.
 
-| Service | Default port | URL |
-|---------|--------------|-----|
-| Shop (React + nginx) | `8080` | http://localhost:8080 |
-| API (Laravel + Apache, localhost only) | `8000` | http://127.0.0.1:8000/api/products |
-| MySQL (localhost only) | `3306` | `127.0.0.1:3306` |
+1. Checks that Docker is installed and running
+2. Finds free ports: if a preferred port is taken, it uses the next free one and leaves whatever is running there alone
+3. Generates a root `.env` file with the Laravel key, database passwords and admin password on the first run, and reuses it later
+4. Builds the images, starts the containers, runs migrations, seeds the shop and creates the admin account
+5. Waits until the shop responds, then prints the addresses and the admin login
+
+| Service | Default port | Address |
+|---------|--------------|---------|
+| Shop | `8080` | http://localhost:8080 |
+| API (localhost only) | `8000` | http://127.0.0.1:8000/api/products |
 | Mailpit, the mail inbox (localhost only) | `8025` | http://127.0.0.1:8025 |
+| MySQL (localhost only) | `3306` | `127.0.0.1:3306` |
 
-The actual ports are printed at the end of the script and saved in `.env`. Preferred ports can be changed, e.g. `.\setup.ps1 -AppPort 3000` or `./setup.sh --app-port 3000`.
-
-The API and MySQL ports are published on `127.0.0.1` only, so other machines reach the API through the shop on port `8080`.
-
-The stack runs on a fixed subnet (`10.213.47.0/24`) with nginx at `10.213.47.10`, the only proxy Laravel trusts for the client IP. If the subnet clashes with another network, change `DOCKER_SUBNET` and `FRONTEND_IP` together in `.env`. A stack started before this was added needs `docker compose down` first (the setup scripts do that for you).
-
-Detailed error pages are off by default. To turn them on while debugging, set `APP_DEBUG=true` in `.env` and re-run the setup script.
-
-### Admin login
-
-The setup script generates `ADMIN_PASSWORD` on the first run, keeps it in `.env` and prints it with `ADMIN_EMAIL` at the end of every run. There is no default password: `php artisan shop:admin` refuses to run without one. It reads both variables and is safe to repeat, so to change the password edit `.env` and re-run the setup script, which also signs the admin out of existing sessions.
-
-An admin is a normal customer account with the `is_admin` flag, so the login is the same as for customers. The flag can only be set by `shop:admin`, never through the API.
-
-### Email and Mailpit
-
-All mail goes to Mailpit, a local inbox that sends nothing to the outside world. Open it at the address printed by the setup script to read order confirmations, status updates, password reset links, newsletter confirmations and contact form messages. Mail is queued and sent by the `queue` service, so a stopped worker delays messages but does not lose them.
-
-The contact details returned by `GET /api/config`, including the address that receives contact form messages, come from the `SHOP_CONTACT_*` variables in `.env`. The defaults are fictional.
-
-### Simulated payment
-
-There is no payment provider. The checkout page checks the card number itself and sends only the last four digits to `POST /api/orders/{order}/pay`. No card number, expiry date or CVV reaches the server.
-
-| Card | Result |
-|------|--------|
-| `4242 4242 4242 4242` | Accepted: the order is paid and moves to processing |
-| `4000 0000 0000 0002` | Declined (any card ending in `0002`): the payment fails and can be retried |
-
-Any future expiry date and any 3 digit CVV work. Bank transfers and cash are confirmed by an admin in the panel. Cash is available only with store pickup.
-
-An unpaid order holds its stock, so card and transfer orders still unpaid after 48 hours are cancelled automatically and the customer is told by email. Change the time with `SHOP_UNPAID_ORDER_HOURS` in `.env`. Cash for store pickup does not expire. One customer can have 5 unpaid orders open and one IP address 10. The address is stored only as a keyed hash.
-
-### Architecture
-
-```
-browser ──► frontend (nginx :80) ──► /            React build (SPA)
-                                 ├─► /api/*       ─┐
-                                 └─► /storage/*   ─┴─► backend (PHP 8.3 + Apache) ──► db (MySQL 8.4)
-
-queue (php artisan queue:work)      ──► db, mailpit
-scheduler (php artisan schedule:work) ──► db
-```
-
-The `scheduler` service cancels unpaid orders hourly and removes unconfirmed newsletter addresses daily. `routes/console.php` holds the schedule.
-
-Uploaded photos and thumbnails live in the `product_images` volume, so they survive rebuilding the images. A new volume starts with the photos baked into the image.
-
-The frontend is built with `VITE_API_URL=/`, so the browser talks only to one origin and nginx proxies API calls and product images to Laravel — no CORS configuration needed.
+The ports actually used are printed at the end and saved in `.env`. Preferred ports can be changed with `.\setup.ps1 -AppPort 3000` or `./setup.sh --app-port 3000`.
 
 ### Useful commands
 
 ```bash
-docker compose ps              # container status
-docker compose logs -f backend # follow Laravel logs
-docker compose logs -f queue   # follow the mail worker
-docker compose down            # stop the stack
-docker compose down -v         # stop and delete the database and uploaded photos
-./setup.sh                     # (or setup.ps1) rebuild & redeploy after code changes
-docker compose exec backend php artisan migrate:fresh --force && docker compose exec backend php artisan shop:seed
-docker compose exec backend php artisan shop:thumbnails   # create missing thumbnails
+docker compose ps               # container status
+docker compose logs -f backend  # follow the Laravel logs
+docker compose logs -f queue    # follow the mail worker
+docker compose down             # stop the stack
+docker compose down -v          # stop and delete the database and uploaded photos
 ```
 
-> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database. It also creates variants, the coupons `WITAJ10` (10%) and `MINUS20` (20 zł from 150 zł), six demo customers and reviews, and marks a few products as on sale or new.
->
-> **Upgrading an existing database:** just run the setup script. The migrations add variants with a stock of 10 for every existing product. Old card orders count as paid, because the old checkout took the card with the order, and each old order gets one status event. Old orders never took stock, so cancelling one adds none back. On every start the container runs `shop:seed --if-empty`, which imports products only into an empty shop and fills coupons, demo customers and reviews only while each of those is empty, so nothing is duplicated and a coupon an admin deleted does not come back. A plain `shop:seed` restores individual missing coupons and reviews, and also imports the products again.
+Run the setup script again to rebuild after code changes. Your database and `.env` stay in place.
 
-## 📋 Prerequisites (manual setup without Docker)
+### Accounts and demo data
 
-- **PHP** >= 8.3
-- **Node.js** >= 22.22
-- **Composer**
-- **MySQL** or **SQLite**
-- **Git**
+The admin account is created by the setup script, which keeps the generated password in `.env` and prints it at the end of every run. There is no default password. An admin signs in on the normal login page and finds the panel at `/admin`.
 
-## 🛠️ Installation
+Demo customers exist only so that the shop has reviews and have random passwords. To shop, register a new account or place an order, which creates one.
 
-### Backend Setup (Laravel)
+| Coupon | Discount |
+|--------|----------|
+| `WITAJ10` | 10% |
+| `MINUS20` | 20 zł on orders from 150 zł |
 
-1. **Navigate to backend directory**
-   ```bash
-   cd backend
-   ```
+Delivery costs 15.99 zł by courier, 12.99 zł to a parcel locker and nothing for store pickup. Courier and locker delivery are free from 300 zł after the discount. Prices, lockers and invoice details are in `backend/config/shop.php`.
 
-2. **Install PHP dependencies**
-   ```bash
-   composer install
-   ```
+### Simulated Payment
 
-3. **Environment configuration**
-   ```bash
-   cp .env.example .env
-   php artisan key:generate
-   ```
+There is no payment provider. The payment screen checks the card number in the browser and sends only the last four digits to the server, so no card number, expiry date or CVV ever reaches it.
 
-4. **Configure database** in `.env` file:
-   ```env
-   DB_CONNECTION=mysql
-   DB_HOST=127.0.0.1
-   DB_PORT=3306
-   DB_DATABASE=your_database_name
-   DB_USERNAME=your_username
-   DB_PASSWORD=your_password
-   ```
+| Card | Result |
+|------|--------|
+| `4242 4242 4242 4242` | Accepted: the order is paid and moves to processing |
+| `4000 0000 0000 0002` | Declined, as is any card ending in `0002`: the payment can be retried |
 
-5. **Run migrations**
-   ```bash
-   php artisan migrate
-   ```
+Any future expiry date and any 3-digit CVV work. Bank transfers and cash are confirmed by an admin in the panel, and cash is available only with store pickup.
 
-6. **Seed product data**
-   ```bash
-   php artisan shop:seed
-   ```
+### Email
 
-7. **Create storage link**
-   ```bash
-   php artisan storage:link
-   ```
+All mail goes to Mailpit, a local inbox that sends nothing to the outside world. Open it at the address printed by the setup script to read order confirmations, status updates, password reset links, newsletter confirmations and contact messages.
 
-8. **Start Laravel development server**
-   ```bash
-   php artisan serve
-   ```
+The shop contact details come from the `SHOP_CONTACT_*` variables in `.env`, and the defaults are fictional.
 
-### Frontend Setup (React)
+### Architecture
 
-1. **Navigate to frontend directory**
-   ```bash
-   cd frontend
-   ```
-
-2. **Install Node.js dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-## 📁 Project Structure
-
-```
-├── backend/                    # Laravel API
-│   ├── app/
-│   │   ├── Console/Commands/   # Custom Artisan commands
-│   │   ├── Http/Controllers/   # API controllers
-│   │   └── Models/            # Eloquent models
-│   ├── database/
-│   │   └── migrations/        # Database migrations
-│   ├── routes/
-│   │   └── api.php           # API routes
-│   └── storage/
-│       └── app/public/       # Product images
-│
-└── frontend/                  # React application
-    ├── src/
-    │   ├── components/        # React components
-    │   ├── pages/            # Page components
-    │   └── App.jsx           # Main application
-    ├── package.json          # Dependencies
-    └── vite.config.js        # Vite configuration
+```mermaid
+flowchart LR
+    Browser --> nginx[nginx with the React build]
+    nginx -->|/api, /storage| Backend[Laravel on Apache]
+    Backend --> MySQL
+    Queue[Queue worker] --> MySQL
+    Queue --> Mailpit
+    Scheduler --> MySQL
 ```
 
-## 🔌 API Endpoints
+The browser talks to one origin, and nginx passes API calls and product images to Laravel. The queue worker sends mail. The scheduler cancels unpaid orders every hour and removes unconfirmed newsletter addresses every day. Uploaded photos and thumbnails live in the `product_images` volume, so they survive a rebuild.
+
+## Manual Installation
+
+### Backend
+
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+```
+
+Set `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`, then run:
+
+```bash
+php artisan migrate
+php artisan shop:seed --local
+php artisan shop:admin
+php artisan shop:thumbnails
+php artisan storage:link
+php artisan serve
+```
+
+Mail is written to the log by default. To process queued jobs and scheduled tasks, run `php artisan queue:work` and `php artisan schedule:work` in separate terminals.
+
+### Frontend
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+The dev server talks to the API on `http://localhost:8000` unless `VITE_API_URL` says otherwise.
+
+## Running Tests
+
+Run the tests from a manual installation, because the Docker images contain no development packages.
+
+```bash
+cd backend
+composer install
+php artisan test   # always uses in-memory SQLite, never your database
+```
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run test
+npm run build
+```
+
+The backend has over 650 feature and unit tests covering orders, stock, payments, access control, uploads, email and invoices. The frontend has over 300 tests covering the cart, the API layer, forms and components.
+
+## Security
+
+- **Authentication**: Sanctum tokens that expire after 7 days, revoked on password change and reset
+- **Access control**: Ownership checks on every order, invoice, cart, wishlist and review route, and all admin routes behind one middleware group, each covered by tests
+- **Input handling**: Validation on every endpoint, whitelists for sorting and filtering, and bound parameters for all queries, including escaped search terms
+- **Rate limits**: Login, registration, password reset, reviews, orders, contact form and newsletter, with password attempts limited per email and per account
+- **Stock and payments**: Locked transactions, so an order cannot be paid twice and coupon limits cannot be passed
+- **Uploads**: Checked by real content, re-encoded and stored under random names, with script execution blocked under `/storage`
+- **Browser**: Content Security Policy and other security headers in nginx, no raw HTML rendering, and internal-only redirects after login
+- **Privacy**: No card data on the server, no sensitive data in logs, IP addresses stored only as a keyed hash
+
+Registration and checkout say when an email already has an account, so an address can be tested for registration. This is a deliberate trade-off: the person needs to know to log in instead, and rate limits slow down anyone probing addresses.
+
+## Project Structure
+
+```
+backend/
+  app/
+    Console/Commands/   Seeding, admin account, thumbnails, scheduled tasks
+    Http/Controllers/   Shop and admin API
+    Mail/               Queued emails
+    Models/             Eloquent models
+    Services/           Pricing, orders, catalog, invoices, images, newsletter
+  config/shop.php       Delivery, lockers, invoice details, contact details
+  database/migrations/  Schema
+  docs/api.md           API reference
+  routes/               API routes and schedule
+frontend/
+  docker/               nginx configuration
+  src/
+    Components/Shop/    Shop pages
+    Components/Admin/   Admin panel
+    Components/ui/      Shared interface components
+    Context/            Session, cart and toast state
+    hooks/              Data hooks
+    lib/                API client, formatting, cart and validation helpers
+docker-compose.yml
+setup.ps1, setup.sh, setup.cmd
+```
+
+## Database Structure
+
+| Table | Holds |
+|-------|-------|
+| `products`, `product_variants`, `product_images` | Catalog, stock per size and color, photos |
+| `customers` | Accounts, including the admin flag |
+| `orders`, `order_items`, `order_status_events` | Orders, items with the price and name at purchase, status history |
+| `cart_items`, `wishlist_items`, `reviews` | Data saved per customer |
+| `coupons` | Discount codes and their limits |
+| `newsletter_subscribers`, `contact_messages` | Subscribers with their confirmation state, messages from the contact form |
+
+## API Endpoints
 
 Every endpoint, with its request fields and response shape, is described in [backend/docs/api.md](backend/docs/api.md).
 
-## 🗄️ Database Schema
+## Troubleshooting
 
-### Core Tables
-- **products** - Product information (name, category, price, description, rating)
-- **product_variants** - Stock per size and color
-- **product_images** - Product image associations
-- **customers** - Customer accounts and profiles
-- **orders** - Order information, status and payment state
-- **order_items** - Individual items within orders
-- **order_status_events** - History of each order
-- **cart_items**, **wishlist_items**, **reviews** - Saved per customer
-- **coupons** - Discount codes and their limits
-- **newsletter_subscribers** - Addresses with their confirmation state
-- **contact_messages** - Messages from the contact form
+**The stack does not start and the network is reported as overlapping**: The stack uses the subnet `10.213.47.0/24`. Change `DOCKER_SUBNET` and `FRONTEND_IP` together in `.env` and run the setup script again.
 
-### Key Features
-- **Multi-auth system** with separate guards for users and customers
-- **JSON fields** for flexible product attributes (colors, sizes)
-- **Comprehensive order tracking** with billing/shipping addresses
-- **Image management** with file storage integration
+**A page shows no details about an error**: Debug pages are off by default. Set `APP_DEBUG=true` in `.env` and run the setup script again.
 
-## 💳 Payment & Delivery Methods
+**Emails do not arrive**: Look in Mailpit, not in a real mailbox, and check the worker with `docker compose logs queue`.
 
-### Payment Options
-- **Card Payment** - Simulated, see [Simulated payment](#simulated-payment)
-- **Bank Transfer** - Confirmed by an admin
-- **Cash Payment** - Paid at store pickup, confirmed by an admin
+**Signed out unexpectedly**: Tokens expire after 7 days, so sign in again.
 
-### Delivery Options
-- **Courier** - 15.99 zł
-- **Pickup Point** - 12.99 zł, parcel locker chosen at checkout
-- **Store Pickup** - Free
+## License
 
-Delivery is free from 300 zł after the discount. Prices, lockers and the seller details for invoices are in `backend/config/shop.php`.
+This project is released under the GNU General Public License v3.0. See [LICENSE](LICENSE).
 
-## 🎨 Frontend Technologies
+## Interface Preview
 
-- **React 19** - Modern React with hooks
-- **React Router** - Client-side routing
-- **Tailwind CSS** - Utility-first CSS framework
-- **Vite** - Fast build tool and development server
-- **PropTypes** - Runtime type checking
+Screenshots of the running application with seeded demo data. Names, addresses and orders are fictional, and the interface is in Polish.
 
-## 🛡️ Security Features
+### Shop
 
-- **Laravel Sanctum** for API authentication, with tokens that expire after 7 days
-- **Ownership checks** on every order, invoice, cart, wishlist and review route
-- **Admin routes** behind one middleware group
-- **Rate limits** on login, registration, password reset, reviews, orders and coupon checks
-- **Input Validation** on all API endpoints, with whitelists for sorting and filtering
-- **SQL Injection Protection** via Eloquent ORM and bound parameters
-- **Locked transactions** for stock, coupon limits and payments
-- **Upload checks** on the real file content, with random server-side names
-- **No card data** on the server, and no sensitive data in logs
-- **Limits on unpaid orders**, so nobody can hold a product's stock without paying
-- **Password Hashing** using Laravel's built-in hashing
+| Home | Catalog with filters |
+|------|----------------------|
+| ![Home page with the category list, new products and sale items](docs/screenshots/01-home.jpg) | ![Catalog with filters in use](docs/screenshots/02-catalog.jpg) |
 
-Registration and checkout say when an email already has an account, which lets someone test whether an address is registered. This is a deliberate usability trade-off: the person needs to know to log in instead. Rate limits slow it down. Forgot-password and the newsletter give the same reply either way.
+| Product on sale | Cart |
+|-----------------|------|
+| ![Product page with a sale price and reviews](docs/screenshots/03-product.jpg) | ![Cart with a summary](docs/screenshots/04-cart.jpg) |
 
-## 📝 Environment Variables
+### Checkout and orders
 
-### Backend (.env)
-```env
-APP_NAME="E-commerce Shop"
-APP_ENV=local
-APP_KEY=base64:your_key_here
-APP_DEBUG=true
-APP_URL=http://localhost:8000
+| Checkout | Test payment |
+|----------|--------------|
+| ![Checkout with a parcel locker and a coupon](docs/screenshots/05-checkout.jpg) | ![Simulated card payment screen](docs/screenshots/06-payment.jpg) |
 
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=shop_db
-DB_USERNAME=root
-DB_PASSWORD=
+| Order with status history | Account |
+|---------------------------|---------|
+| ![Paid order with its status history](docs/screenshots/07-order.jpg) | ![Customer account page](docs/screenshots/08-account.jpg) |
 
-SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+| Wishlist | Contact |
+|----------|---------|
+| ![Wishlist](docs/screenshots/09-wishlist.jpg) | ![Contact form](docs/screenshots/10-contact.jpg) |
 
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=choose-a-long-password
+### Admin panel
 
-SHOP_UNPAID_ORDER_HOURS=48
+| Overview | Products |
+|----------|----------|
+| ![Admin overview with sales and low stock](docs/screenshots/11-admin-overview.jpg) | ![Admin product list](docs/screenshots/12-admin-products.jpg) |
 
-SHOP_CONTACT_EMAIL=kontakt@sklep.example
-SHOP_CONTACT_PHONE="+48 000 000 000"
-SHOP_CONTACT_ADDRESS="ul. Przykładowa 1, 00-001 Warszawa"
-SHOP_CONTACT_HOURS="pon.-pt. 9:00-17:00"
-```
+| Product form | Orders |
+|--------------|--------|
+| ![Product form with variants and photos](docs/screenshots/13-admin-product-form.jpg) | ![Admin order list](docs/screenshots/14-admin-orders.jpg) |
 
-## 🆘 Troubleshooting
+| Order details | Coupons |
+|---------------|---------|
+| ![Admin order details with status actions](docs/screenshots/15-admin-order.jpg) | ![Coupon list](docs/screenshots/16-admin-coupons.jpg) |
 
-### Common Issues
+| Messages | Newsletter |
+|----------|------------|
+| ![Contact messages](docs/screenshots/17-admin-messages.jpg) | ![Newsletter subscribers](docs/screenshots/18-admin-newsletter.jpg) |
 
-**CORS Issues**
-- Add your frontend URL to `CORS_ALLOWED_ORIGINS` (a `*` is ignored on purpose)
-- Ensure `SANCTUM_STATEFUL_DOMAINS` includes your frontend URL
+### Mobile
 
-**Database Connection**
-- Verify database credentials in `.env`
-- Ensure database server is running
-
-**Missing Product Images**
-- Run `php artisan storage:link`
-- Add actual images to `storage/app/public/products/`
-- Images should be named: `zdj1.jpg`, `zdj2.jpg`, etc.
-
-**Authentication Issues**
-- Clear browser cookies and localStorage
-- Restart both servers
-- Tokens expire after 7 days, so a 401 after that means signing in again
-
-**Emails Do Not Arrive**
-- Check that the `queue` service is running: `docker compose logs queue`
-- Look for the message in Mailpit, not in a real mailbox
+| Home | Product | Checkout | Admin |
+|------|---------|----------|-------|
+| <img src="docs/screenshots/19-mobile-home.jpg" alt="Home page on a phone" width="200"> | <img src="docs/screenshots/20-mobile-product.jpg" alt="Product page on a phone" width="200"> | <img src="docs/screenshots/21-mobile-checkout.jpg" alt="Checkout on a phone" width="200"> | <img src="docs/screenshots/22-mobile-admin.jpg" alt="Admin panel on a phone" width="200"> |
