@@ -65,14 +65,32 @@ class SensitiveLoggingTest extends TestCase
         $this->assertSame([], $this->logged);
     }
 
-    public function test_rejected_card_logs_nothing(): void
+    public function test_declined_card_logs_nothing(): void
     {
         $payload = $this->payloadWithSecrets();
-        $payload['payment']['card_number'] = '4242 4242 4242 4241';
+        $response = $this->postJson('/api/orders', $payload)->assertOk();
+        $this->logged = [];
 
-        $this->postJson('/api/orders', $payload)->assertStatus(422);
+        $this->withToken($response->json('token'))
+            ->postJson('/api/orders/' . $response->json('order.id') . '/pay', ['card_last_four' => '0002'])
+            ->assertStatus(402);
 
         $this->assertSame([], $this->logged);
+    }
+
+    public function test_successful_payment_logs_only_the_order_id(): void
+    {
+        $payload = $this->payloadWithSecrets();
+        $response = $this->postJson('/api/orders', $payload)->assertOk();
+        $this->logged = [];
+
+        $this->withToken($response->json('token'))
+            ->postJson('/api/orders/' . $response->json('order.id') . '/pay', ['card_last_four' => '4242'])
+            ->assertOk();
+
+        $this->assertNothingSensitiveLogged($payload);
+        $this->assertCount(1, $this->logged);
+        $this->assertSame(['order_id'], array_keys($this->logged[0][1]));
     }
 
     public function test_login_logout_and_me_log_nothing(): void

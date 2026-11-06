@@ -9,79 +9,78 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Concerns\BuildsOrders;
 use Tests\TestCase;
 
+/**
+ * Card data no longer reaches the server: the number, expiry and CVV are checked in the
+ * frontend simulator and POST /orders/{order}/pay receives only the last four digits.
+ */
 class OrderPaymentValidationTest extends TestCase
 {
     use BuildsOrders, RefreshDatabase;
 
-    private function orderWithCard(array $card): TestResponse
+    private function payWith(mixed $body): TestResponse
     {
-        $payload = $this->orderPayload($this->createProduct());
-        $payload['payment'] = array_merge($payload['payment'], $card);
+        $order = $this->postJson('/api/orders', $this->orderPayload($this->createProduct()))->assertOk();
 
-        return $this->postJson('/api/orders', $payload);
+        return $this->withToken($order->json('token'))
+            ->postJson('/api/orders/' . $order->json('order.id') . '/pay', $body);
     }
 
-    public static function invalidCards(): array
+    public static function invalidLastFour(): array
     {
         return [
-            'failed Luhn check' => [['card_number' => '4242 4242 4242 4241'], 'payment.card_number', 'Nieprawidłowy numer karty'],
-            'too short' => [['card_number' => '4242 42'], 'payment.card_number', 'Numer karty musi mieć od 13 do 19 cyfr'],
-            'bad date format' => [['expiry_date' => '1/2030'], 'payment.expiry_date', 'Data ważności musi być w formacie MM/RR'],
-            'bad month' => [['expiry_date' => '13/99'], 'payment.expiry_date', 'Nieprawidłowy miesiąc'],
-            'expired' => [['expiry_date' => '01/20'], 'payment.expiry_date', 'Karta jest przeterminowana'],
-            'bad cvv' => [['cvv' => '12'], 'payment.cvv', 'CVV musi mieć 3-4 cyfry'],
+            'too short' => [['card_last_four' => '424']],
+            'too long' => [['card_last_four' => '42424']],
+            'letters' => [['card_last_four' => '42a2']],
+            'a whole card number' => [['card_last_four' => '4242424242424242']],
+            'a number instead of a string' => [['card_last_four' => 4242]],
+            'non ascii digits' => [['card_last_four' => '٤٢٤٢']],
+            'a list' => [['card_last_four' => ['4242']]],
+            'missing' => [[]],
         ];
     }
 
-    #[DataProvider('invalidCards')]
-    public function test_invalid_card_gets_422_with_the_error_under_the_key_checkout_reads(
-        array $card,
-        string $field,
-        string $message
-    ): void {
-        $response = $this->orderWithCard($card);
-
-        $response->assertStatus(422);
-        $this->assertSame([$message], $response->json('errors')[$field]);
-        $this->assertDatabaseCount('customers', 0);
-        $this->assertDatabaseCount('orders', 0);
-    }
-
-    public function test_all_card_errors_are_reported_together(): void
+    #[DataProvider('invalidLastFour')]
+    public function test_invalid_last_four_digits_get_422_and_change_nothing(array $body): void
     {
-        $response = $this->orderWithCard([
-            'card_number' => '4242 4242 4242 4241',
-            'expiry_date' => '01/20',
-            'cvv' => '12',
-        ]);
+        $this->payWith($body)->assertStatus(422)->assertJsonValidationErrors(['card_last_four']);
 
-        $response->assertStatus(422);
-        $this->assertSame(
-            ['payment.card_number', 'payment.cvv', 'payment.expiry_date'],
-            collect($response->json('errors'))->keys()->sort()->values()->all()
-        );
-    }
-
-    public function test_missing_card_fields_are_rejected_for_card_payment(): void
-    {
-        $response = $this->orderWithCard(['card_number' => '', 'card_name' => '', 'expiry_date' => '', 'cvv' => '']);
-
-        $response->assertStatus(422)->assertJsonValidationErrors([
-            'payment.card_number',
-            'payment.card_name',
-            'payment.expiry_date',
-            'payment.cvv',
-        ]);
+        $order = Order::sole();
+        $this->assertSame('unpaid', $order->payment_status);
+        $this->assertSame(['method' => 'card'], $order->payment_details);
     }
 
     public function test_only_the_last_four_digits_of_a_card_are_stored(): void
     {
-        $this->orderWithCard([])->assertOk();
+        $this->payWith(['card_last_four' => '4242'])->assertOk();
 
-        $this->assertSame(
-            ['method' => 'card', 'card_last_four' => '4242', 'card_name' => 'Jan Kowalski'],
-            Order::sole()->payment_details
-        );
+        $this->assertSame(['method' => 'card', 'card_last_four' => '4242'], Order::sole()->payment_details);
+    }
+
+    public function test_card_fields_sent_to_the_order_endpoint_are_ignored_and_never_stored(): void
+    {
+        $response = $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), [
+            'card_last_four' => '1234',
+            'payment' => [
+                'card_number' => '4242 4242 4242 4242',
+                'card_name' => 'Jan Kowalski',
+                'expiry_date' => '12/99',
+                'cvv' => '987',
+            ],
+        ]));
+
+        $response->assertOk();
+        $stored = Order::sole();
+        $this->assertSame(['method' => 'card'], $stored->payment_details);
+        $this->assertSame('unpaid', $stored->payment_status);
+        $this->assertStringNotContainsString('4242', json_encode($stored->getAttributes()));
+        $this->assertStringNotContainsString('987', (string) $stored->getRawOriginal('payment_details'));
+    }
+
+    public function test_card_order_does_not_need_any_card_fields(): void
+    {
+        $this->postJson('/api/orders', $this->orderPayload($this->createProduct()))->assertOk();
+
+        $this->assertSame('card', Order::sole()->payment_method);
     }
 
     public static function offlineMethods(): array
@@ -90,14 +89,23 @@ class OrderPaymentValidationTest extends TestCase
     }
 
     #[DataProvider('offlineMethods')]
-    public function test_offline_payment_works_with_the_empty_card_fields_checkout_sends(string $method): void
+    public function test_offline_payment_needs_no_card_fields(string $method): void
     {
         $response = $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), [
             'payment_method' => $method,
-            'payment' => ['card_number' => '', 'card_name' => '', 'expiry_date' => '', 'cvv' => ''],
+            'delivery_method' => 'store_pickup',
         ]));
 
         $response->assertOk();
         $this->assertSame($method, Order::sole()->payment_details['method']);
+        $this->assertArrayHasKey('instructions', Order::sole()->payment_details);
+    }
+
+    public function test_transfer_instructions_use_the_configured_account(): void
+    {
+        $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), ['payment_method' => 'transfer']))
+            ->assertOk();
+
+        $this->assertStringContainsString(config('shop.bank_account'), Order::sole()->payment_details['instructions']);
     }
 }

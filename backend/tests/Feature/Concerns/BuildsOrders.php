@@ -4,14 +4,15 @@ namespace Tests\Feature\Concerns;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductVariant;
 
 trait BuildsOrders
 {
     protected string $customerPassword = 'correct-password';
 
-    protected function createProduct(array $overrides = []): Product
+    protected function createProduct(array $overrides = [], int $stock = 100): Product
     {
-        return Product::create(array_merge([
+        $product = Product::create(array_merge([
             'nazwa' => 'Kurtka testowa',
             'kategoria' => 'Kurtki',
             'cena' => 100.50,
@@ -20,6 +21,17 @@ trait BuildsOrders
             'rozmiar' => ['S', 'M'],
             'kolor' => ['Czarny', 'Pudrowy róż'],
         ], $overrides));
+
+        foreach ($product->optionCombinations() as $combination) {
+            $product->variants()->forceCreate($combination + ['stock' => $stock]);
+        }
+
+        return $product;
+    }
+
+    protected function variantOf(Product $product, string $size = 'M', string $color = 'Czarny'): ProductVariant
+    {
+        return $product->variants()->where(['size' => $size, 'color' => $color])->firstOrFail();
     }
 
     protected function createCustomer(array $overrides = []): Customer
@@ -38,9 +50,6 @@ trait BuildsOrders
         ], $overrides));
     }
 
-    /**
-     * Same shape as the body sent by frontend/src/Components/Shop/Checkout.jsx.
-     */
     protected function orderPayload(Product $product, array $overrides = []): array
     {
         return array_merge([
@@ -58,12 +67,6 @@ trait BuildsOrders
             'country' => 'Polska',
             'payment_method' => 'card',
             'delivery_method' => 'courier',
-            'payment' => [
-                'card_number' => '4242 4242 4242 4242',
-                'card_name' => 'Jan Kowalski',
-                'expiry_date' => now()->addYear()->format('m/y'),
-                'cvv' => '123',
-            ],
             'cart_items' => [[
                 'product_id' => $product->id,
                 'quantity' => 1,

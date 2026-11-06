@@ -1,9 +1,19 @@
+# Uploaded and seeded photos never change under the same name for long.
+<IfModule mod_headers.c>
+    <FilesMatch "(?i)\.(jpe?g|png|webp)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
     </IfModule>
 
     RewriteEngine On
+
+    # Nothing under storage runs as PHP, even under a double extension.
+    RewriteRule ^storage/.*\.(php[0-9]*|pht|phtml|phar)(\.|/|$) - [F,NC,L]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .

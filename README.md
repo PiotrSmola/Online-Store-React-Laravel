@@ -1,15 +1,22 @@
 # Online-Store-React-Laravel
 
-A full-stack e-commerce application built with **Laravel** (backend API) and **React** (frontend) featuring product catalog, shopping cart, customer authentication, and order management.
+A full-stack e-commerce application built with **Laravel** (backend API) and **React** (frontend) featuring a searchable catalog with stock per variant, sale prices, saved carts, coupons, simulated card payments, PDF invoices, email notifications, a double opt-in newsletter, a contact form and an admin API.
 
 ## 🚀 Features
 
 ### Backend (Laravel API)
-- **Product Management**: Product catalog with categories, images, and detailed information
-- **Customer Authentication**: Registration, login, and profile management using Laravel Sanctum
-- **Order Processing**: Complete order management with multiple payment and delivery methods
-- **API Endpoints**: RESTful API for all frontend operations
-- **Data Seeding**: Custom Artisan command to populate products from external API
+- **Catalog**: Search, filters, sorting and pagination, with stock kept per size and color variant, sale prices and new product flags
+- **Cart and pricing**: Saved carts, coupons, free delivery threshold; the server is the only source of prices
+- **Orders**: Locked stock handling, a status flow with history, cancellation that returns stock
+- **Simulated payment**: Card flow with test cards, no card data on the server
+- **Customer accounts**: Registration, login, password reset, profile, wishlist and verified buyer reviews, using Laravel Sanctum
+- **Admin API**: Dashboard numbers, products with variants and photos, orders, customers, coupons, review moderation, contact messages and newsletter subscribers
+- **Newsletter**: Double opt-in with an unsubscribe link in every message, and a CSV export of confirmed addresses. It collects subscribers only and does not send campaigns
+- **Contact form**: Stored for the admin panel and emailed to the shop address
+- **Email**: Queued order confirmations, status updates, password reset, newsletter confirmation and contact form messages
+- **Invoices**: PDF invoices with net, VAT and gross amounts
+- **Images**: Thumbnails 640 px wide, created on upload and by `php artisan shop:thumbnails`
+- **Data seeding**: Products, variants, coupons, demo customers and reviews from one Artisan command
 
 ### Frontend (React)
 - **Modern React**: Built with React 19 and React Router for navigation
@@ -38,15 +45,16 @@ Then run the setup script:
 The script:
 1. checks that Docker is installed and running,
 2. finds free ports — if a default port is already taken, it **uses the next free one** (it never stops anything that is already running),
-3. generates a root `.env` file (Laravel `APP_KEY`, database passwords) on the first run and reuses it later,
-4. builds the images, starts the containers, runs migrations, seeds the products and waits until the shop responds,
-5. prints the URLs.
+3. generates a root `.env` file (Laravel `APP_KEY`, database passwords, admin password) on the first run and reuses it later,
+4. builds the images, starts the containers, runs migrations, seeds the shop, creates the admin account and waits until the shop responds,
+5. prints the URLs and the admin login.
 
 | Service | Default port | URL |
 |---------|--------------|-----|
 | Shop (React + nginx) | `8080` | http://localhost:8080 |
 | API (Laravel + Apache, localhost only) | `8000` | http://127.0.0.1:8000/api/products |
 | MySQL (localhost only) | `3306` | `127.0.0.1:3306` |
+| Mailpit, the mail inbox (localhost only) | `8025` | http://127.0.0.1:8025 |
 
 The actual ports are printed at the end of the script and saved in `.env`. Preferred ports can be changed, e.g. `.\setup.ps1 -AppPort 3000` or `./setup.sh --app-port 3000`.
 
@@ -56,13 +64,45 @@ The stack runs on a fixed subnet (`10.213.47.0/24`) with nginx at `10.213.47.10`
 
 Detailed error pages are off by default. To turn them on while debugging, set `APP_DEBUG=true` in `.env` and re-run the setup script.
 
+### Admin login
+
+The setup script generates `ADMIN_PASSWORD` on the first run, keeps it in `.env` and prints it with `ADMIN_EMAIL` at the end of every run. There is no default password: `php artisan shop:admin` refuses to run without one. It reads both variables and is safe to repeat, so to change the password edit `.env` and re-run the setup script, which also signs the admin out of existing sessions.
+
+An admin is a normal customer account with the `is_admin` flag, so the login is the same as for customers. The flag can only be set by `shop:admin`, never through the API.
+
+### Email and Mailpit
+
+All mail goes to Mailpit, a local inbox that sends nothing to the outside world. Open it at the address printed by the setup script to read order confirmations, status updates, password reset links, newsletter confirmations and contact form messages. Mail is queued and sent by the `queue` service, so a stopped worker delays messages but does not lose them.
+
+The contact details returned by `GET /api/config`, including the address that receives contact form messages, come from the `SHOP_CONTACT_*` variables in `.env`. The defaults are fictional.
+
+### Simulated payment
+
+There is no payment provider. The checkout page checks the card number itself and sends only the last four digits to `POST /api/orders/{order}/pay`. No card number, expiry date or CVV reaches the server.
+
+| Card | Result |
+|------|--------|
+| `4242 4242 4242 4242` | Accepted: the order is paid and moves to processing |
+| `4000 0000 0000 0002` | Declined (any card ending in `0002`): the payment fails and can be retried |
+
+Any future expiry date and any 3 digit CVV work. Bank transfers and cash are confirmed by an admin in the panel. Cash is available only with store pickup.
+
+An unpaid order holds its stock, so card and transfer orders still unpaid after 48 hours are cancelled automatically and the customer is told by email. Change the time with `SHOP_UNPAID_ORDER_HOURS` in `.env`. Cash for store pickup does not expire. One customer can have 5 unpaid orders open and one IP address 10. The address is stored only as a keyed hash.
+
 ### Architecture
 
 ```
 browser ──► frontend (nginx :80) ──► /            React build (SPA)
                                  ├─► /api/*       ─┐
                                  └─► /storage/*   ─┴─► backend (PHP 8.3 + Apache) ──► db (MySQL 8.4)
+
+queue (php artisan queue:work)      ──► db, mailpit
+scheduler (php artisan schedule:work) ──► db
 ```
+
+The `scheduler` service cancels unpaid orders hourly and removes unconfirmed newsletter addresses daily. `routes/console.php` holds the schedule.
+
+Uploaded photos and thumbnails live in the `product_images` volume, so they survive rebuilding the images. A new volume starts with the photos baked into the image.
 
 The frontend is built with `VITE_API_URL=/`, so the browser talks only to one origin and nginx proxies API calls and product images to Laravel — no CORS configuration needed.
 
@@ -71,13 +111,17 @@ The frontend is built with `VITE_API_URL=/`, so the browser talks only to one or
 ```bash
 docker compose ps              # container status
 docker compose logs -f backend # follow Laravel logs
+docker compose logs -f queue   # follow the mail worker
 docker compose down            # stop the stack
-docker compose down -v         # stop and delete the database volume
+docker compose down -v         # stop and delete the database and uploaded photos
 ./setup.sh                     # (or setup.ps1) rebuild & redeploy after code changes
 docker compose exec backend php artisan migrate:fresh --force && docker compose exec backend php artisan shop:seed
+docker compose exec backend php artisan shop:thumbnails   # create missing thumbnails
 ```
 
-> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database.
+> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database. It also creates variants, the coupons `WITAJ10` (10%) and `MINUS20` (20 zł from 150 zł), six demo customers and reviews, and marks a few products as on sale or new.
+>
+> **Upgrading an existing database:** just run the setup script. The migrations add variants with a stock of 10 for every existing product. Old card orders count as paid, because the old checkout took the card with the order, and each old order gets one status event. Old orders never took stock, so cancelling one adds none back. On every start the container runs `shop:seed --if-empty`, which imports products only into an empty shop and fills coupons, demo customers and reviews only while each of those is empty, so nothing is duplicated and a coupon an admin deleted does not come back. A plain `shop:seed` restores individual missing coupons and reviews, and also imports the products again.
 
 ## 📋 Prerequisites (manual setup without Docker)
 
@@ -180,28 +224,22 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 
 ## 🔌 API Endpoints
 
-### Public Endpoints
-- `GET /api/products` - Get all products
-- `GET /api/products/{id}` - Get single product
-- `GET /api/products/category/{category}` - Get products by category
-- `GET /api/categories` - Get all categories
-- `POST /api/customer/login` - Customer login
-- `POST /api/orders` - Create new order
-
-### Authenticated Endpoints (requires Sanctum token)
-- `POST /api/customer/logout` - Customer logout
-- `GET /api/customer/me` - Get customer profile
-- `GET /api/orders` - Get customer orders
-- `GET /api/orders/{id}` - Get single order
+Every endpoint, with its request fields and response shape, is described in [backend/docs/api.md](backend/docs/api.md).
 
 ## 🗄️ Database Schema
 
 ### Core Tables
 - **products** - Product information (name, category, price, description, rating)
+- **product_variants** - Stock per size and color
 - **product_images** - Product image associations
 - **customers** - Customer accounts and profiles
-- **orders** - Order information and status
+- **orders** - Order information, status and payment state
 - **order_items** - Individual items within orders
+- **order_status_events** - History of each order
+- **cart_items**, **wishlist_items**, **reviews** - Saved per customer
+- **coupons** - Discount codes and their limits
+- **newsletter_subscribers** - Addresses with their confirmation state
+- **contact_messages** - Messages from the contact form
 
 ### Key Features
 - **Multi-auth system** with separate guards for users and customers
@@ -212,14 +250,16 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 ## 💳 Payment & Delivery Methods
 
 ### Payment Options
-- **Card Payment** - Credit/debit card processing
-- **Bank Transfer** - Traditional bank transfer
-- **Cash Payment** - Pay in-store pickup
+- **Card Payment** - Simulated, see [Simulated payment](#simulated-payment)
+- **Bank Transfer** - Confirmed by an admin
+- **Cash Payment** - Paid at store pickup, confirmed by an admin
 
 ### Delivery Options
-- **Courier** - Home delivery service
-- **Pickup Point** - Collection from parcel lockers
-- **Store Pickup** - Collect from physical store
+- **Courier** - 15.99 zł
+- **Pickup Point** - 12.99 zł, parcel locker chosen at checkout
+- **Store Pickup** - Free
+
+Delivery is free from 300 zł after the discount. Prices, lockers and the seller details for invoices are in `backend/config/shop.php`.
 
 ## 🎨 Frontend Technologies
 
@@ -231,11 +271,19 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 
 ## 🛡️ Security Features
 
-- **Laravel Sanctum** for API authentication
-- **CSRF Protection** for form submissions
-- **Input Validation** on all API endpoints
-- **SQL Injection Protection** via Eloquent ORM
+- **Laravel Sanctum** for API authentication, with tokens that expire after 7 days
+- **Ownership checks** on every order, invoice, cart, wishlist and review route
+- **Admin routes** behind one middleware group
+- **Rate limits** on login, registration, password reset, reviews, orders and coupon checks
+- **Input Validation** on all API endpoints, with whitelists for sorting and filtering
+- **SQL Injection Protection** via Eloquent ORM and bound parameters
+- **Locked transactions** for stock, coupon limits and payments
+- **Upload checks** on the real file content, with random server-side names
+- **No card data** on the server, and no sensitive data in logs
+- **Limits on unpaid orders**, so nobody can hold a product's stock without paying
 - **Password Hashing** using Laravel's built-in hashing
+
+Registration and checkout say when an email already has an account, which lets someone test whether an address is registered. This is a deliberate usability trade-off: the person needs to know to log in instead. Rate limits slow it down. Forgot-password and the newsletter give the same reply either way.
 
 ## 📝 Environment Variables
 
@@ -255,6 +303,17 @@ DB_USERNAME=root
 DB_PASSWORD=
 
 SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=choose-a-long-password
+
+SHOP_UNPAID_ORDER_HOURS=48
+
+SHOP_CONTACT_EMAIL=kontakt@sklep.example
+SHOP_CONTACT_PHONE="+48 000 000 000"
+SHOP_CONTACT_ADDRESS="ul. Przykładowa 1, 00-001 Warszawa"
+SHOP_CONTACT_HOURS="pon.-pt. 9:00-17:00"
 ```
 
 ## 🆘 Troubleshooting
@@ -262,8 +321,8 @@ SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
 ### Common Issues
 
 **CORS Issues**
+- Add your frontend URL to `CORS_ALLOWED_ORIGINS` (a `*` is ignored on purpose)
 - Ensure `SANCTUM_STATEFUL_DOMAINS` includes your frontend URL
-- Check Laravel CORS configuration
 
 **Database Connection**
 - Verify database credentials in `.env`
@@ -277,4 +336,8 @@ SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
 **Authentication Issues**
 - Clear browser cookies and localStorage
 - Restart both servers
-- Check API token expiration
+- Tokens expire after 7 days, so a 401 after that means signing in again
+
+**Emails Do Not Arrive**
+- Check that the `queue` service is running: `docker compose logs queue`
+- Look for the message in Mailpit, not in a real mailbox

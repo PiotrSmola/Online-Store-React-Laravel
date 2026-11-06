@@ -117,6 +117,8 @@ class OrderPasswordGuessingTest extends TestCase
 
     public function test_correct_password_does_not_use_up_the_budget(): void
     {
+        config(['shop.open_orders.per_customer' => 100]);
+
         for ($i = 0; $i < 6; $i++) {
             $this->orderWithPassword($this->customerPassword)->assertOk();
         }

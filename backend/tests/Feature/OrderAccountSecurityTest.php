@@ -111,14 +111,18 @@ class OrderAccountSecurityTest extends TestCase
             ->assertOk()->assertJsonPath('id', $customer->id);
     }
 
-    public function test_new_customer_needs_a_password_of_at_least_six_characters(): void
+    public function test_new_customer_needs_a_password_of_at_least_eight_characters(): void
     {
         $response = $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), [
-            'password' => 'abc',
+            'password' => 'seven77',
         ]));
 
         $response->assertStatus(422)->assertJsonValidationErrors(['password']);
         $this->assertDatabaseCount('customers', 0);
+
+        $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), [
+            'password' => 'eight888',
+        ]))->assertOk();
     }
 
     public function test_existing_customer_with_correct_password_can_order_and_receives_a_token(): void

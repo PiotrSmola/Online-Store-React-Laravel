@@ -31,7 +31,7 @@ class OrderQuantityValidationTest extends TestCase
         $this->orderQuantity($this->createProduct(), 99)->assertOk();
 
         $this->assertSame(99, OrderItem::sole()->quantity);
-        $this->assertSame('9965.49', Order::sole()->total_amount);
+        $this->assertSame('9949.50', Order::sole()->total_amount);
     }
 
     public function test_quantity_of_100_is_rejected_in_polish_and_writes_nothing(): void
