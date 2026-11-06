@@ -106,6 +106,7 @@ class CartPricing
 
         return [
             'key' => $item['key'],
+            'variant_id' => $variant?->id,
             'product' => $product,
             'size' => $item['size'],
             'color' => $item['color'],

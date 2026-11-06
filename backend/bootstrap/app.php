@@ -1,11 +1,14 @@
 <?php
 
+use App\Support\SafeExceptionContext;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
@@ -33,6 +36,13 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*') || $request->expectsJson());
+
+        // A failed query's message quotes its bindings: emails, hashes, addresses.
+        $exceptions->report(function (QueryException $e) {
+            Log::error('Database query failed', SafeExceptionContext::of($e));
+
+            return false;
+        });
 
         // The default messages are in English and a 404 names the model and the id.
         $exceptions->render(fn (AuthenticationException $e, Request $request) => $request->is('api/*')

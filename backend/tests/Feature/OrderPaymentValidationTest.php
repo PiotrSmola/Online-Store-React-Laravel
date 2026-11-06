@@ -94,6 +94,7 @@ class OrderPaymentValidationTest extends TestCase
     {
         $response = $this->postJson('/api/orders', $this->orderPayload($this->createProduct(), [
             'payment_method' => $method,
+            'delivery_method' => 'store_pickup',
             'payment' => ['card_number' => '', 'card_name' => '', 'expiry_date' => '', 'cvv' => ''],
         ]));
 

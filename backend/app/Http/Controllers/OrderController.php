@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\CartPricing;
+use App\Services\OrderService;
 use App\Support\PasswordAttempts;
+use App\Support\SafeExceptionContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -13,68 +16,40 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
     private const ACCOUNT_EXISTS_MESSAGE = 'Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.';
 
+    private const ORDERS_PER_PAGE = 20;
+
+    public function __construct(private OrderService $orders, private CartPricing $pricing)
+    {
+    }
+
     public function store(Request $request)
     {
         try {
             $authenticatedCustomer = $request->user('sanctum');
 
-            $request->validate([
-                'customer_type' => 'required|in:individual,company',
-                'email' => $authenticatedCustomer ? 'nullable' : 'required|email',
-                'password' => 'nullable|string',
-                'first_name' => 'required|string|max:255',
-                'last_name' => 'required|string|max:255',
-                'phone' => 'required|string|max:20',
-                'address' => 'required|string|max:255',
-                'city' => 'required|string|max:255',
-                'postal_code' => 'required|string|max:10',
-                'country' => 'required|string|max:255',
-                'company_name' => 'nullable|string|max:255',
-                'nip' => 'nullable|string|max:20',
-                'payment_method' => 'required|in:card,transfer,cash',
-                'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_methods')))],
-                'cart_items' => 'required|array|min:1',
-                'cart_items.*.product_id' => 'required|integer|exists:products,id',
-                'cart_items.*.quantity' => 'required|integer|min:1|max:99',
-                'cart_items.*.selected_size' => 'nullable|string',
-                'cart_items.*.selected_color' => 'nullable|string',
-                'payment' => 'required|array',
-                'payment.card_number' => 'required_if:payment_method,card|nullable|string',
-                'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
-                'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
-                'payment.cvv' => 'required_if:payment_method,card|nullable|string',
-            ], [
+            $validated = $request->validate($this->checkoutRules($request, $authenticatedCustomer !== null), [
                 'cart_items.*.quantity.max' => 'Maksymalna ilość jednego produktu to 99',
             ]);
 
-            if ($request->payment_method === 'card') {
-                $this->validateCardPayment($request->payment);
+            if ($validated['payment_method'] === 'card') {
+                $this->validateCardPayment($validated['payment']);
             }
 
             $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
-            $orderItems = $this->buildOrderItems($request->cart_items);
+            $items = $this->checkedItems($validated['cart_items']);
 
             // Failure paths must throw: a response returned from this closure would commit.
-            return DB::transaction(function () use ($request, $customer, $authenticatedCustomer, $orderItems) {
-                $customerData = [
-                    'first_name' => $request->first_name,
-                    'last_name' => $request->last_name,
-                    'phone' => $request->phone,
-                    'company_name' => $request->company_name,
-                    'nip' => $request->nip,
-                    'address' => $request->address,
-                    'city' => $request->city,
-                    'postal_code' => $request->postal_code,
-                    'country' => $request->country,
-                    'customer_type' => $request->customer_type,
-                ];
+            return DB::transaction(function () use ($request, $validated, $customer, $authenticatedCustomer, $items) {
+                $customerData = $this->customerData($validated);
 
                 if ($customer) {
                     $customer->update($customerData);
@@ -91,61 +66,17 @@ class OrderController extends Controller
                     }
                 }
 
-                $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
-                $deliveryPrice = config('shop.delivery_methods')[$request->delivery_method]['price'];
-                $totalAmount = round($itemsTotal + $deliveryPrice, 2);
-
-                $paymentDetails = [
-                    'method' => $request->payment_method,
-                ];
-
-                if ($request->payment_method === 'card') {
-                    $cardNumber = str_replace(' ', '', $request->payment['card_number']);
-                    $paymentDetails['card_last_four'] = substr($cardNumber, -4);
-                    $paymentDetails['card_name'] = $request->payment['card_name'];
-                } elseif ($request->payment_method === 'transfer') {
-                    $paymentDetails['instructions'] = 'Przelew na konto: 12 3456 7890 1234 5678 9012 3456';
-                } elseif ($request->payment_method === 'cash') {
-                    $paymentDetails['instructions'] = 'Płatność przy odbiorze w sklepie';
-                }
-
-                $order = Order::create([
-                    'customer_id' => $customer->id,
-                    'total_amount' => $totalAmount,
-                    'status' => 'pending',
-                    'payment_method' => $request->payment_method,
-                    'delivery_method' => $request->delivery_method,
-                    'delivery_price' => $deliveryPrice,
-                    'billing_address' => [
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'company_name' => $request->company_name,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                    ],
-                    'shipping_address' => [
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'company_name' => $request->company_name,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                    ],
-                    'payment_details' => $paymentDetails,
-                    'order_date' => now(),
+                $order = $this->orders->place($customer, [
+                    'items' => $items,
+                    'payment_method' => $validated['payment_method'],
+                    'delivery_method' => $validated['delivery_method'],
+                    'billing_address' => $this->billingAddress($validated),
+                    'shipping_address' => $this->shippingAddress($validated),
+                    'payment_details' => $this->paymentDetails($validated),
                 ]);
 
-                Log::info('Order created', ['order_id' => $order->id]);
-
-                foreach ($orderItems as $item) {
-                    $order->items()->create($item);
-                }
-
                 $response = [
-                    'order' => $order->load('items.product.images'),
+                    'order' => $order->load(Order::DETAILS),
                     'customer' => $customer,
                     'message' => 'Zamówienie zostało złożone pomyślnie!'
                 ];
@@ -157,7 +88,7 @@ class OrderController extends Controller
                 }
 
                 return response()->json($response);
-            });
+            }, 3);
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Błędy walidacji',
@@ -166,12 +97,63 @@ class OrderController extends Controller
         } catch (HttpResponseException $e) {
             return $e->getResponse();
         } catch (\Throwable $e) {
-            Log::error('Order creation failed', $this->safeExceptionContext($e));
+            Log::error('Order creation failed', SafeExceptionContext::of($e));
 
             return response()->json([
                 'message' => 'Nie udało się złożyć zamówienia. Spróbuj ponownie później.'
             ], 500);
         }
+    }
+
+    private function checkoutRules(Request $request, bool $isAuthenticated): array
+    {
+        return [
+            'customer_type' => 'required|in:individual,company',
+            'email' => $isAuthenticated ? 'nullable' : 'required|email',
+            'password' => 'nullable|string',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+            'postal_code' => 'required|string|max:10',
+            'country' => 'required|string|max:255',
+            'company_name' => 'nullable|required_if:customer_type,company|string|max:255',
+            'nip' => 'nullable|required_if:customer_type,company|string|max:20',
+            'payment_method' => [
+                'required',
+                'in:card,transfer,cash',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request) {
+                    if ($value === 'cash' && $request->input('delivery_method') !== 'store_pickup') {
+                        $fail('Płatność gotówką jest możliwa tylko przy odbiorze w sklepie.');
+                    }
+                },
+            ],
+            'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_methods')))],
+            'pickup_point' => [
+                'nullable',
+                'required_if:delivery_method,pickup_point',
+                Rule::in(array_column(config('shop.pickup_points'), 'code')),
+            ],
+            'shipping' => 'nullable|array',
+            'shipping.first_name' => 'required_with:shipping|string|max:255',
+            'shipping.last_name' => 'required_with:shipping|string|max:255',
+            'shipping.company_name' => 'nullable|string|max:255',
+            'shipping.address' => 'required_with:shipping|string|max:255',
+            'shipping.city' => 'required_with:shipping|string|max:255',
+            'shipping.postal_code' => 'required_with:shipping|string|max:10',
+            'shipping.country' => 'required_with:shipping|string|max:255',
+            'cart_items' => 'required|array|min:1|max:100',
+            'cart_items.*.product_id' => 'required|integer|exists:products,id',
+            'cart_items.*.quantity' => 'required|integer|min:1|max:99',
+            'cart_items.*.selected_size' => 'nullable|string|max:255',
+            'cart_items.*.selected_color' => 'nullable|string|max:255',
+            'payment' => 'required|array',
+            'payment.card_number' => 'required_if:payment_method,card|nullable|string',
+            'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
+            'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
+            'payment.cvv' => 'required_if:payment_method,card|nullable|string',
+        ];
     }
 
     // For a request without a token: the existing account if the password proves ownership,
@@ -194,11 +176,7 @@ class OrderController extends Controller
             ]);
         }
 
-        if (mb_strlen($request->password) < 6) {
-            throw ValidationException::withMessages([
-                'password' => ['Hasło musi mieć minimum 6 znaków'],
-            ]);
-        }
+        Validator::make(['password' => $request->password], ['password' => [Password::defaults()]])->validate();
 
         return null;
     }
@@ -225,30 +203,46 @@ class OrderController extends Controller
         return false;
     }
 
-    private function buildOrderItems(array $cartItems): array
+    /**
+     * Checks the chosen options against what each product offers, naming the cart line.
+     * Stock is checked later, under the lock.
+     */
+    private function checkedItems(array $cartItems): array
     {
-        $orderItems = [];
+        $products = Product::query()
+            ->whereIn('id', array_column($cartItems, 'product_id'))
+            ->get(['id', 'nazwa', 'rozmiar', 'kolor'])
+            ->keyBy('id');
+
+        $items = [];
         $errors = [];
 
         foreach ($cartItems as $index => $item) {
-            $product = Product::findOrFail($item['product_id']);
-            $selectedSize = $item['selected_size'] ?? null;
-            $selectedColor = $item['selected_color'] ?? null;
+            $product = $products->get($item['product_id']);
+            $size = $item['selected_size'] ?? null;
+            $color = $item['selected_color'] ?? null;
 
-            if ($error = $this->optionError($product, 'rozmiar', $product->rozmiar, $selectedSize)) {
-                $errors["cart_items.{$index}.selected_size"] = [$error];
+            if (!$product) {
+                $errors["cart_items.{$index}.product_id"] = ['Ten produkt jest już niedostępny'];
+
+                continue;
             }
 
-            if ($error = $this->optionError($product, 'kolor', $product->kolor, $selectedColor)) {
-                $errors["cart_items.{$index}.selected_color"] = [$error];
+            $optionErrors = $this->pricing->optionErrors($product, $size, $color);
+
+            if ($optionErrors['size']) {
+                $errors["cart_items.{$index}.selected_size"] = [$optionErrors['size']];
             }
 
-            $orderItems[] = [
-                'product_id' => $product->id,
+            if ($optionErrors['color']) {
+                $errors["cart_items.{$index}.selected_color"] = [$optionErrors['color']];
+            }
+
+            $items[] = [
+                'product_id' => $item['product_id'],
                 'quantity' => $item['quantity'],
-                'price' => $product->cena,
-                'selected_size' => blank($selectedSize) ? null : $selectedSize,
-                'selected_color' => blank($selectedColor) ? null : $selectedColor,
+                'size' => $size,
+                'color' => $color,
             ];
         }
 
@@ -256,48 +250,75 @@ class OrderController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        return $orderItems;
+        return $items;
     }
 
-    // $offered is the product's JSON column, which can be null or an empty list.
-    private function optionError(Product $product, string $label, mixed $offered, ?string $selected): ?string
+    private function customerData(array $validated): array
     {
-        $options = array_filter(
-            array_map(fn ($option) => trim((string) $option), (array) $offered),
-            fn ($option) => $option !== ''
-        );
-
-        if ($options === []) {
-            return blank($selected) ? null : "Produkt „{$product->nazwa}” nie ma opcji: {$label}";
-        }
-
-        if (blank($selected)) {
-            return "Wybierz {$label} produktu „{$product->nazwa}”";
-        }
-
-        return in_array($selected, $options, true)
-            ? null
-            : "Wybrany {$label} produktu „{$product->nazwa}” jest niedostępny";
-    }
-
-    // Exception messages can embed SQL bindings (emails, password hashes) and trace
-    // strings embed call arguments, so only the type and code locations are logged.
-    private function safeExceptionContext(\Throwable $e): array
-    {
-        $appFrames = [];
-
-        foreach ($e->getTrace() as $frame) {
-            if (isset($frame['file']) && !str_contains($frame['file'], DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) {
-                $appFrames[] = $frame['file'] . ':' . ($frame['line'] ?? '?');
-            }
-        }
-
         return [
-            'exception_class' => $e::class,
-            'code' => $e->getCode(),
-            'location' => $e->getFile() . ':' . $e->getLine(),
-            'app_frames' => array_slice($appFrames, 0, 10),
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'phone' => $validated['phone'],
+            'company_name' => $validated['company_name'] ?? null,
+            'nip' => $validated['nip'] ?? null,
+            'address' => $validated['address'],
+            'city' => $validated['city'],
+            'postal_code' => $validated['postal_code'],
+            'country' => $validated['country'],
+            'customer_type' => $validated['customer_type'],
         ];
+    }
+
+    private function billingAddress(array $validated): array
+    {
+        return [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'company_name' => $validated['company_name'] ?? null,
+            'nip' => $validated['nip'] ?? null,
+            'address' => $validated['address'],
+            'city' => $validated['city'],
+            'postal_code' => $validated['postal_code'],
+            'country' => $validated['country'],
+        ];
+    }
+
+    private function shippingAddress(array $validated): array
+    {
+        $shipping = $validated['shipping'] ?? [];
+
+        $address = [
+            'first_name' => $shipping['first_name'] ?? $validated['first_name'],
+            'last_name' => $shipping['last_name'] ?? $validated['last_name'],
+            'company_name' => $shipping ? ($shipping['company_name'] ?? null) : ($validated['company_name'] ?? null),
+            'address' => $shipping['address'] ?? $validated['address'],
+            'city' => $shipping['city'] ?? $validated['city'],
+            'postal_code' => $shipping['postal_code'] ?? $validated['postal_code'],
+            'country' => $shipping['country'] ?? $validated['country'],
+        ];
+
+        if ($validated['delivery_method'] === 'pickup_point') {
+            $address['pickup_point'] = collect(config('shop.pickup_points'))->firstWhere('code', $validated['pickup_point']);
+        }
+
+        return $address;
+    }
+
+    private function paymentDetails(array $validated): array
+    {
+        $method = $validated['payment_method'];
+        $details = ['method' => $method];
+
+        if ($method === 'card') {
+            $details['card_last_four'] = substr(str_replace(' ', '', $validated['payment']['card_number']), -4);
+            $details['card_name'] = $validated['payment']['card_name'];
+        } elseif ($method === 'transfer') {
+            $details['instructions'] = 'Przelew na konto: ' . config('shop.bank_account');
+        } else {
+            $details['instructions'] = 'Płatność przy odbiorze w sklepie';
+        }
+
+        return $details;
     }
 
     // Walidacja płatności kartą (algorytm Luhn)
@@ -374,20 +395,32 @@ class OrderController extends Controller
     public function index(Request $request)
     {
         $orders = $request->user()->orders()
-            ->with('items.product.images')
+            ->withDetails()
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('id', 'desc')
+            ->paginate(self::ORDERS_PER_PAGE);
 
         return response()->json($orders);
     }
 
     public function show(Request $request, Order $order)
     {
-        if ($order->customer_id !== $request->user()->id) {
-            return response()->json(['message' => 'Brak dostępu'], 403);
-        }
+        $this->ensureOwner($request, $order);
 
-        $order->load('items.product.images');
-        return response()->json($order);
+        return response()->json($order->load(Order::DETAILS));
+    }
+
+    public function cancel(Request $request, Order $order)
+    {
+        $this->ensureOwner($request, $order);
+
+        $cancelled = $this->orders->changeStatus($order, 'cancelled', 'Anulowane przez klienta', requiredStatus: 'pending');
+
+        return response()->json($cancelled->load(Order::DETAILS));
+    }
+
+    private function ensureOwner(Request $request, Order $order): void
+    {
+        abort_unless($order->isOwnedBy($request->user()), response()->json(['message' => 'Brak dostępu'], 403));
     }
 }

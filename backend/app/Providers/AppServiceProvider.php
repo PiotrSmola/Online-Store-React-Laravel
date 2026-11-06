@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +25,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Password::defaults(fn () => Password::min(8));
+
         $tooManyAttempts = fn (Request $request, array $headers) => PasswordAttempts::tooManyResponse($headers);
 
         RateLimiter::for('login', function (Request $request) use ($tooManyAttempts) {
