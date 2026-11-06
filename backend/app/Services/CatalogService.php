@@ -25,7 +25,7 @@ class CatalogService
     private const DEFAULT_PER_PAGE = 12;
 
     /** Everything a product card needs. No description, no variant list. */
-    public const LIST_COLUMNS = ['id', 'nazwa', 'kategoria', 'cena', 'sale_price', 'ocena', 'reviews_count', 'rozmiar', 'kolor'];
+    public const LIST_COLUMNS = ['id', 'nazwa', 'kategoria', 'cena', 'sale_price', 'ocena', 'reviews_count', 'rozmiar', 'kolor', 'is_new'];
 
     public const IMAGE_COLUMNS = 'images:id,product_id,image_path,order';
 
@@ -77,6 +77,10 @@ class CatalogService
             $query->whereNotNull('sale_price');
         }
 
+        if (!empty($filters['is_new'])) {
+            $query->where('is_new', true);
+        }
+
         $size = $filters['size'] ?? null;
         $color = $filters['color'] ?? null;
 
@@ -101,7 +105,13 @@ class CatalogService
 
         // Only real categories reach the cache, so a request cannot fill it with made-up keys.
         if ($category !== null && !in_array($category, array_column($categories, 'name'), true)) {
-            return ['categories' => $categories, 'sizes' => [], 'colors' => [], 'price' => ['min' => null, 'max' => null]];
+            return [
+                'categories' => $categories,
+                'sizes' => [],
+                'colors' => [],
+                'price' => ['min' => null, 'max' => null],
+                'counts' => ['new' => 0, 'on_sale' => 0],
+            ];
         }
 
         return ['categories' => $categories] + $this->remember(
@@ -137,6 +147,10 @@ class CatalogService
             'price' => [
                 'min' => $price?->min === null ? null : (float) $price->min,
                 'max' => $price?->max === null ? null : (float) $price->max,
+            ],
+            'counts' => [
+                'new' => (clone $products)->where('is_new', true)->count(),
+                'on_sale' => (clone $products)->whereNotNull('sale_price')->count(),
             ],
         ];
     }

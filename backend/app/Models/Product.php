@@ -22,10 +22,12 @@ class Product extends Model
         'rozmiar',
         'kolor',
         'is_active',
+        'is_new',
     ];
 
     protected $attributes = [
         'is_active' => true,
+        'is_new' => false,
     ];
 
     protected $appends = [
@@ -41,6 +43,7 @@ class Product extends Model
         'sale_price' => 'decimal:2',
         'ocena' => 'decimal:1',
         'is_active' => 'boolean',
+        'is_new' => 'boolean',
         'reviews_count' => 'integer',
     ];
 

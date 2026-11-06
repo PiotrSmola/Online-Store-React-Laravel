@@ -157,6 +157,22 @@ class AdminApiTest extends TestCase
         $this->assertDatabaseMissing('product_variants', ['product_id' => $product->id, 'size' => 'S']);
     }
 
+    public function test_admin_can_mark_a_product_new_and_unmark_it(): void
+    {
+        $product = $this->createProduct();
+
+        $this->putJson("/api/admin/products/{$product->id}", ['is_new' => true])->assertOk()->assertJsonPath('is_new', true);
+        $this->getJson('/api/admin/products')->assertJsonPath('data.0.is_new', true);
+        $this->putJson("/api/admin/products/{$product->id}", ['is_new' => false])->assertOk()->assertJsonPath('is_new', false);
+        $this->putJson("/api/admin/products/{$product->id}", ['is_new' => 'nowy'])->assertStatus(422);
+    }
+
+    public function test_a_created_product_is_not_new_unless_asked(): void
+    {
+        $this->postJson('/api/admin/products', $this->productBody())->assertCreated()->assertJsonPath('is_new', false);
+        $this->postJson('/api/admin/products', $this->productBody(['is_new' => true]))->assertCreated()->assertJsonPath('is_new', true);
+    }
+
     public function test_put_without_variants_leaves_them_alone(): void
     {
         $product = $this->createProduct([], 5);

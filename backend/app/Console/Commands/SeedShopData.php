@@ -82,6 +82,8 @@ class SeedShopData extends Command
                     'ocena' => $productData['ocena'],
                     'rozmiar' => $productData['rozmiar'],
                     'kolor' => $productData['kolor'],
+                    // Every fifth product, by position, so every run marks the same ones.
+                    'is_new' => $index % 5 === 1,
                 ]);
 
                 $imageName = 'zdj' . ($index + 1) . '.jpg';

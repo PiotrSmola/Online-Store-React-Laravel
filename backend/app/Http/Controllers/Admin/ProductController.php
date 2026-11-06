@@ -80,6 +80,7 @@ class ProductController extends Controller
             'sale_price' => 'sometimes|nullable|numeric|min:0.01|max:99999999.99',
             'opis' => "{$required}|string|max:20000",
             'is_active' => 'sometimes|boolean',
+            'is_new' => 'sometimes|boolean',
             'variants' => "{$required}|array|min:1|max:500",
             'variants.*.size' => 'nullable|string|max:255',
             'variants.*.color' => 'nullable|string|max:255',

@@ -252,6 +252,7 @@ class CatalogTest extends TestCase
             'sizes' => ['42', 'S', 'M', 'XL'],
             'colors' => ['Biały', 'Czarny', 'Zielony'],
             'price' => ['min' => 50, 'max' => 500],
+            'counts' => ['new' => 0, 'on_sale' => 0],
         ]);
 
         $this->getJson('/api/catalog/filters?category=Kurtki')->assertOk()
@@ -259,6 +260,61 @@ class CatalogTest extends TestCase
             ->assertJsonPath('colors', ['Biały', 'Czarny'])
             ->assertJsonPath('price', ['min' => 50, 'max' => 70])
             ->assertJsonCount(2, 'categories');
+    }
+
+    public function test_is_new_filter_and_flag(): void
+    {
+        $this->createProduct(['nazwa' => 'Nowość', 'is_new' => true]);
+        $this->createProduct(['nazwa' => 'Stary']);
+
+        $this->assertSame(['Nowość'], $this->names('?is_new=1'));
+        $this->assertCount(2, $this->names('?is_new=0'));
+        $this->getJson('/api/products?is_new=1')->assertJsonPath('data.0.is_new', true);
+        $this->getJson('/api/products?is_new=tak')->assertStatus(422)->assertJsonValidationErrors(['is_new']);
+    }
+
+    public function test_new_and_on_sale_filters_combine(): void
+    {
+        $this->createProduct(['nazwa' => 'Oba', 'is_new' => true, 'cena' => 100, 'sale_price' => 50]);
+        $this->createProduct(['nazwa' => 'Tylko nowy', 'is_new' => true]);
+        $this->createProduct(['nazwa' => 'Tylko promocja', 'cena' => 100, 'sale_price' => 50]);
+
+        $this->assertSame(['Oba'], $this->names('?is_new=1&on_sale=1'));
+    }
+
+    public function test_filters_count_new_and_on_sale_products(): void
+    {
+        $this->createProduct(['kategoria' => 'Kurtki', 'is_new' => true]);
+        $this->createProduct(['kategoria' => 'Kurtki', 'is_new' => true, 'cena' => 100, 'sale_price' => 50]);
+        $this->createProduct(['kategoria' => 'Obuwie', 'cena' => 100, 'sale_price' => 50]);
+        $this->createProduct(['kategoria' => 'Obuwie', 'is_new' => true, 'is_active' => false]);
+
+        $this->getJson('/api/catalog/filters')->assertJsonPath('counts', ['new' => 2, 'on_sale' => 2]);
+        $this->getJson('/api/catalog/filters?category=Obuwie')->assertJsonPath('counts', ['new' => 0, 'on_sale' => 1]);
+        $this->getJson('/api/catalog/filters?category=Nie%20ma')->assertJsonPath('counts', ['new' => 0, 'on_sale' => 0]);
+    }
+
+    public function test_marking_a_product_new_refreshes_the_cached_counts(): void
+    {
+        $product = $this->createProduct();
+        $this->getJson('/api/catalog/filters')->assertJsonPath('counts.new', 0);
+
+        $product->update(['is_new' => true]);
+
+        $this->getJson('/api/catalog/filters')->assertJsonPath('counts.new', 1);
+    }
+
+    public function test_seeding_marks_a_few_products_new_the_same_way_each_time(): void
+    {
+        $this->artisan('shop:seed --local')->assertSuccessful();
+        $this->artisan('shop:seed --local')->assertSuccessful();
+
+        $rows = Product::query()->orderBy('id')->pluck('is_new')->all();
+        [$first, $second] = array_chunk($rows, count($rows) / 2);
+
+        $this->assertSame($first, $second);
+        $this->assertContains(true, $first);
+        $this->assertContains(false, $first);
     }
 
     public function test_unknown_category_gets_empty_options(): void

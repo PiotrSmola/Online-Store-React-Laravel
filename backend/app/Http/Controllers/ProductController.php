@@ -27,6 +27,7 @@ class ProductController extends Controller
             'min_price' => 'nullable|numeric|min:0',
             'max_price' => 'nullable|numeric|min:0',
             'on_sale' => 'nullable|boolean',
+            'is_new' => 'nullable|boolean',
             'size' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:255',
             'sort' => ['nullable', Rule::in(array_keys(CatalogService::SORTS))],
