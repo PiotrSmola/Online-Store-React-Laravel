@@ -15,9 +15,9 @@ export function getCurrentCustomer({ signal } = {}) {
 }
 
 /**
- * Proves the stored token still works, for endpoints that treat a bad token as a guest instead of
+ * Proves the session still works, for endpoints that treat a bad token as a guest instead of
  * refusing it. A refused token ends the session the usual way: logout and a redirect to login.
  */
 export function verifySession() {
-  return request('/customer/me');
+  return request('/customer/me', { expectSession: true });
 }

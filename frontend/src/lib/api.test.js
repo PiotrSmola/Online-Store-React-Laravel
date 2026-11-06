@@ -221,4 +221,20 @@ describe('401 flow', () => {
     expect(getToken()).toBeNull();
     expect(listener).toHaveBeenCalledOnce();
   });
+
+  it('ends the session when another tab already removed the token', async () => {
+    respondWith(401, { message: 'Unauthenticated.' });
+
+    await failure(verifySession());
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('resolves verifySession for a live token', async () => {
+    storeToken(TOKEN);
+    respondWith(200, { id: 1 });
+
+    await expect(verifySession()).resolves.toEqual({ id: 1 });
+    expect(listener).not.toHaveBeenCalled();
+  });
 });

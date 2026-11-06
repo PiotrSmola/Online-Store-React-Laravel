@@ -57,8 +57,10 @@ function toApiError(response, data) {
  * @param {unknown} [options.body] Sent as JSON.
  * @param {AbortSignal} [options.signal]
  * @param {boolean} [options.quiet401] A 401 only rejects, for calls that check the session itself.
+ * @param {boolean} [options.expectSession] A 401 ends the session even with no stored token, which
+ *   another tab may have removed while this one still shows the customer as signed in.
  */
-export async function request(path, { method = 'GET', body, signal, quiet401 = false } = {}) {
+export async function request(path, { method = 'GET', body, signal, quiet401 = false, expectSession = false } = {}) {
   const token = getToken();
   const headers = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -80,7 +82,7 @@ export async function request(path, { method = 'GET', body, signal, quiet401 = f
   const data = await readJson(response);
   if (response.ok) return data;
 
-  if (response.status === 401 && token && !quiet401) {
+  if (response.status === 401 && (token || expectSession) && !quiet401) {
     storeToken(null);
     unauthorizedListeners.forEach((listener) => listener());
   }
