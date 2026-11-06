@@ -4,7 +4,6 @@ import { formatDateTime, formatPrice } from '../../lib/format';
 import { optionsText } from '../../lib/product';
 import ProductImage from './ProductImage';
 
-const ITEM_IMAGE_SIZES = '4.5rem';
 
 const PAYMENT_TONE = { paid: 'text-pine', failed: 'text-ember' };
 
@@ -106,7 +105,7 @@ export function OrderItems({ items }) {
       <ul className="mt-4 space-y-6">
         {items.map((item) => (
           <li key={item.id} className="grid grid-cols-[4.5rem_1fr] gap-x-4">
-            <ProductImage image={item.product?.images?.[0]} alt="" thumbnail sizes={ITEM_IMAGE_SIZES} />
+            <ProductImage image={item.product?.images?.[0]} alt="" thumbnail />
             <div className="flex flex-wrap items-start justify-between gap-x-4">
               <div>
                 {item.product ? (

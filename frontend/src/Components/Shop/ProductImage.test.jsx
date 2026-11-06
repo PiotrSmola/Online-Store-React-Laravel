@@ -47,16 +47,25 @@ describe('ProductImage', () => {
     expect(shown()).toBe(DEFAULT_IMAGE_URL);
   });
 
-  it('offers the thumbnail and the original through srcset', () => {
+  it('offers the thumbnail and the original of a full photo through srcset', () => {
+    render(<ProductImage image={image} alt="Kurtka" sizes="50vw" />);
+
+    const photo = screen.getByRole('img', { hidden: true });
+    expect(photo.getAttribute('srcset')).toMatch(/thumbs\/zdj1\.jpg 640w/);
+    expect(photo.getAttribute('srcset')).toMatch(/products\/zdj1\.jpg 1600w/);
+    expect(photo.getAttribute('sizes')).toBe('50vw');
+  });
+
+  it('gives a thumbnail no candidates, so a dense screen cannot pull the original', () => {
     render(<ProductImage image={image} alt="Kurtka" thumbnail />);
 
-    const srcset = screen.getByRole('img', { hidden: true }).getAttribute('srcset');
-    expect(srcset).toMatch(/thumbs\/zdj1\.jpg 640w/);
-    expect(srcset).toMatch(/products\/zdj1\.jpg 1600w/);
+    const photo = screen.getByRole('img', { hidden: true });
+    expect(photo.hasAttribute('srcset')).toBe(false);
+    expect(photo.hasAttribute('sizes')).toBe(false);
   });
 
   it('drops srcset after a failure, so the browser cannot pick the missing thumbnail again', () => {
-    render(<ProductImage image={image} alt="Kurtka" thumbnail />);
+    render(<ProductImage image={image} alt="Kurtka" />);
 
     failLoading();
 
