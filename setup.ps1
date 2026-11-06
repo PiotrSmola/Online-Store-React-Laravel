@@ -133,6 +133,7 @@ if ($dbVolumeExists -and -not $existing.ContainsKey('DB_PASSWORD')) {
 }
 $dockerSubnet = Get-Setting 'DOCKER_SUBNET' { $defaults['DOCKER_SUBNET'] }
 $frontendIp = Get-Setting 'FRONTEND_IP' { $defaults['FRONTEND_IP'] }
+$appDebug = Get-Setting 'APP_DEBUG' { $defaults['APP_DEBUG'] }
 
 # --- 4. Free ports ----------------------------------------------------------
 Write-Step 'Looking for free ports...'
@@ -162,6 +163,7 @@ DOCKER_SUBNET=$dockerSubnet
 FRONTEND_IP=$frontendIp
 
 APP_KEY=$appKey
+APP_DEBUG=$appDebug
 
 DB_DATABASE=$dbName
 DB_USERNAME=$dbUser

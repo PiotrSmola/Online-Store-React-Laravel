@@ -115,6 +115,7 @@ fi
 [ -n "$DB_ROOT_PASSWORD" ] || DB_ROOT_PASSWORD="$(random_string 24)"
 DOCKER_SUBNET="$(env_get "$ENV_FILE" DOCKER_SUBNET)"; [ -n "$DOCKER_SUBNET" ] || DOCKER_SUBNET="$(env_get "$EXAMPLE" DOCKER_SUBNET)"
 FRONTEND_IP="$(env_get "$ENV_FILE" FRONTEND_IP)";     [ -n "$FRONTEND_IP" ] || FRONTEND_IP="$(env_get "$EXAMPLE" FRONTEND_IP)"
+APP_DEBUG="$(env_get "$ENV_FILE" APP_DEBUG)";         [ -n "$APP_DEBUG" ] || APP_DEBUG="$(env_get "$EXAMPLE" APP_DEBUG)"
 
 # --- 4. Free ports ------------------------------------------------------------
 step "Looking for free ports..."
@@ -144,6 +145,7 @@ DOCKER_SUBNET=$DOCKER_SUBNET
 FRONTEND_IP=$FRONTEND_IP
 
 APP_KEY=$APP_KEY
+APP_DEBUG=$APP_DEBUG
 
 DB_DATABASE=$DB_DATABASE
 DB_USERNAME=$DB_USERNAME
