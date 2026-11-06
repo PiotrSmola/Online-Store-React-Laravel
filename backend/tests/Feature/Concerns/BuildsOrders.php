@@ -9,9 +9,9 @@ trait BuildsOrders
 {
     protected string $customerPassword = 'correct-password';
 
-    protected function createProduct(array $overrides = []): Product
+    protected function createProduct(array $overrides = [], int $stock = 100): Product
     {
-        return Product::create(array_merge([
+        $product = Product::create(array_merge([
             'nazwa' => 'Kurtka testowa',
             'kategoria' => 'Kurtki',
             'cena' => 100.50,
@@ -20,6 +20,17 @@ trait BuildsOrders
             'rozmiar' => ['S', 'M'],
             'kolor' => ['Czarny', 'Pudrowy róż'],
         ], $overrides));
+
+        foreach ($product->optionCombinations() as $combination) {
+            $product->variants()->forceCreate($combination + ['stock' => $stock]);
+        }
+
+        return $product;
+    }
+
+    protected function variantOf(Product $product, string $size = 'M', string $color = 'Czarny'): ProductVariant
+    {
+        return $product->variants()->where(['size' => $size, 'color' => $color])->firstOrFail();
     }
 
     protected function createCustomer(array $overrides = []): Customer
