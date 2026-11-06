@@ -147,9 +147,12 @@ OrderTotals.propTypes = {
 
 export function OrderMeta({ order }) {
   return (
-    <p className="mt-2 text-stone">
-      {formatDateTime(order.order_date)}: <OrderStatus status={order.status} />
-    </p>
+    <>
+      <p className="mt-2 text-stone">Data zamówienia: {formatDateTime(order.order_date)}</p>
+      <p className="text-stone">
+        Status: <OrderStatus status={order.status} />
+      </p>
+    </>
   );
 }
 

@@ -26,5 +26,5 @@ export function categoryPath(category) {
 }
 
 export function optionsText(size, color) {
-  return [size && `Rozmiar ${size}`, color && `Kolor ${color}`].filter(Boolean).join(', ');
+  return [size && `Rozmiar ${size}`, color && `${size ? 'kolor' : 'Kolor'} ${color}`].filter(Boolean).join(', ');
 }

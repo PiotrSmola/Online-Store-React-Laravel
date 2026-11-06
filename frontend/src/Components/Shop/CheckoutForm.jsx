@@ -7,7 +7,7 @@ import { buildOrderPayload, formatCardNumber, formatExpiry, initialCheckoutForm,
 import { formatPrice } from '../../lib/format';
 import { placeOrder } from '../../lib/orders';
 import { loginPath } from '../../lib/redirect';
-import { PAYMENT_METHODS } from '../../lib/shopConfig';
+import { DELIVERY_METHODS, PAYMENT_METHODS } from '../../lib/shopConfig';
 import Button from '../ui/Button';
 import ErrorSummary from '../ui/ErrorSummary';
 import Field from '../ui/Field';
@@ -161,7 +161,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
     ...(formError ? [{ message: formError }] : []),
   ];
 
-  const deliveryOptions = quote.data?.delivery_options ?? [];
+  const deliveryOptions = quote.data?.delivery_options ?? DELIVERY_METHODS;
 
   return (
     <div className="gutter py-8 lg:py-12">
@@ -305,9 +305,16 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
             )}
           </fieldset>
 
-          <Button type="submit" loading={submitting} className="w-full sm:w-auto">
-            Złóż zamówienie
-          </Button>
+          <div>
+            {/* The summary sits below the form on small screens, and the total must be seen before paying. */}
+            <p className="mb-3 flex justify-between gap-4 text-xl font-semibold lg:hidden">
+              <span>Razem</span>
+              <span>{formatPrice(quote.data?.total)}</span>
+            </p>
+            <Button type="submit" loading={submitting} className="w-full sm:w-auto">
+              Złóż zamówienie
+            </Button>
+          </div>
         </form>
 
         <CheckoutSummary items={items} quote={quote} deliveryMethod={form.delivery_method} />

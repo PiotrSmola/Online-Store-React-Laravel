@@ -17,7 +17,7 @@ export default function Field({ id, label, error = null, hint = null, className 
         id={fieldId}
         aria-invalid={error ? true : undefined}
         aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
-        className={controlClasses(Boolean(error))}
+        className={`${controlClasses(Boolean(error))} read-only:bg-mist`}
         {...input}
       />
       {hint && (

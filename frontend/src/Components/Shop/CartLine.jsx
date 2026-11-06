@@ -26,7 +26,7 @@ export default function CartLine({ item, line = null, compact = false }) {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             {line?.product ? (
-              <Link to={`/product/${item.product_id}`} className="font-medium underline-offset-4 hover:underline">
+              <Link to={`/product/${item.product_id}`} className="block font-medium underline-offset-4 hover:underline">
                 {name}
               </Link>
             ) : (

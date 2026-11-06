@@ -6,8 +6,8 @@ import Skeleton from '../ui/Skeleton';
 import ProductGrid, { ProductGridSkeleton } from './ProductGrid';
 
 const HOME_PRODUCTS = 4;
-const WORD = 'block py-1 text-[clamp(3.25rem,14vw,12rem)] leading-none font-bold font-stretch-condensed';
-const SKELETON_WORDS = ['w-3/5', 'w-4/5', 'w-2/5', 'w-3/5', 'w-4/5', 'w-1/2'];
+const WORD = 'block py-1 text-[clamp(3rem,13vw,11rem)] leading-none font-bold font-stretch-condensed';
+const SKELETON_WORDS = ['w-1/4', 'w-3/5', 'w-1/3', 'w-2/5', 'w-1/2', 'w-2/3'];
 
 function CategoryWords() {
   const categories = useOutletContext();

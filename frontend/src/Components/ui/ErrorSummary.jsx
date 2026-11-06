@@ -21,7 +21,7 @@ export default function ErrorSummary({ errors, focusKey, title = 'Popraw dane w 
             {id ? (
               <a
                 href={`#${id}`}
-                className="text-ember underline underline-offset-4"
+                className="inline-block text-ember underline underline-offset-4"
                 onClick={(event) => {
                   event.preventDefault();
                   document.getElementById(id)?.focus();
