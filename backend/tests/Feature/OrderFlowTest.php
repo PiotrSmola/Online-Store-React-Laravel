@@ -155,9 +155,9 @@ class OrderFlowTest extends TestCase
         $pricing = new class extends CartPricing {
             public int $variantId;
 
-            public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lockVariants = false): array
+            public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lock = false): array
             {
-                $quote = parent::quote($items, $coupon, $deliveryMethod, $lockVariants);
+                $quote = parent::quote($items, $coupon, $deliveryMethod, $lock);
                 ProductVariant::whereKey($this->variantId)->update(['stock' => 0]);
 
                 return $quote;
@@ -186,11 +186,11 @@ class OrderFlowTest extends TestCase
         $pricing = new class extends CartPricing {
             public array $lockFlags = [];
 
-            public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lockVariants = false): array
+            public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lock = false): array
             {
-                $this->lockFlags[] = $lockVariants;
+                $this->lockFlags[] = $lock;
 
-                return parent::quote($items, $coupon, $deliveryMethod, $lockVariants);
+                return parent::quote($items, $coupon, $deliveryMethod, $lock);
             }
         };
 

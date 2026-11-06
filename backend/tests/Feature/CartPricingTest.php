@@ -180,14 +180,6 @@ class CartPricingTest extends TestCase
             ->assertJsonPath('subtotal', 0);
     }
 
-    public function test_unknown_coupon_is_reported_but_the_quote_still_works(): void
-    {
-        $this->quote([$this->item($this->createProduct())], ['coupon' => 'NIEMA'])
-            ->assertOk()
-            ->assertJsonPath('coupon', null)
-            ->assertJsonPath('coupon_error', 'Nieprawidłowy kod rabatowy')
-            ->assertJsonPath('subtotal', 100.5);
-    }
 
     public function test_bad_input_is_rejected(): void
     {

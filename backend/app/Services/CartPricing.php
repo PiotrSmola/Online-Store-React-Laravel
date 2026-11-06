@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Coupon;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Support\Collection;
@@ -14,10 +15,10 @@ class CartPricing
 {
     /**
      * @param  list<array{product_id: int, quantity: int, size?: ?string, color?: ?string}>  $items
-     * @param  bool  $lockVariants  Read stock with FOR UPDATE. Needs an open transaction. Without it
-     *                              a MySQL transaction could price against an older snapshot.
+     * @param  bool  $lock  Read stock and the coupon with FOR UPDATE. Needs an open transaction.
+     *                      Without it a MySQL transaction could price against an older snapshot.
      */
-    public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lockVariants = false): array
+    public function quote(array $items, ?string $coupon = null, ?string $deliveryMethod = null, bool $lock = false): array
     {
         $items = $this->merge($items);
         $productIds = array_column($items, 'product_id');
@@ -32,7 +33,7 @@ class CartPricing
         $variants = ProductVariant::query()
             ->whereIn('product_id', $productIds)
             ->orderBy('id')
-            ->when($lockVariants, fn ($query) => $query->lockForUpdate())
+            ->when($lock, fn ($query) => $query->lockForUpdate())
             ->get()
             ->groupBy('product_id');
 
@@ -42,10 +43,26 @@ class CartPricing
         );
 
         $subtotal = array_sum(array_map(fn (array $line) => $line['available'] ? $this->grosze($line['line_total']) : 0, $lines));
-        $discount = 0;
-        $couponError = filled($coupon) ? 'Nieprawidłowy kod rabatowy' : null;
+        $applied = filled($coupon) ? $this->applyCoupon($coupon, $subtotal, $lock) : [null, 0, null];
 
-        return $this->summary($lines, $subtotal, $discount, null, $couponError, $deliveryMethod);
+        return $this->summary($lines, $subtotal, $applied[1], $applied[0], $applied[2], $deliveryMethod);
+    }
+
+    /** @return array{0: ?array{code: string, label: string}, 1: int, 2: ?string} coupon, discount, error */
+    private function applyCoupon(string $code, int $subtotal, bool $lock): array
+    {
+        $coupon = Coupon::query()
+            ->where('code', Coupon::normalizeCode($code))
+            ->when($lock, fn ($query) => $query->lockForUpdate())
+            ->first();
+
+        $error = $coupon ? $coupon->rejectionFor($subtotal) : Coupon::unknownCodeMessage();
+
+        if ($error) {
+            return [null, 0, $error];
+        }
+
+        return [['code' => $coupon->code, 'label' => $coupon->label], $coupon->discountFor($subtotal), null];
     }
 
     /**

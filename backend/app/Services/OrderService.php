@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CartItem;
+use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProductVariant;
@@ -33,7 +34,8 @@ class OrderService
      *     coupon_code?: ?string
      * }  $checkout
      *
-     * @throws ValidationException with errors.cart when a line cannot be bought
+     * @throws ValidationException with errors.cart when a line cannot be bought,
+     *                             errors.coupon_code when the coupon no longer applies
      */
     public function place(Customer $customer, array $checkout): Order
     {
@@ -42,7 +44,7 @@ class OrderService
                 $checkout['items'],
                 $checkout['coupon_code'] ?? null,
                 $checkout['delivery_method'],
-                lockVariants: true
+                lock: true
             );
 
             $problems = array_values(array_filter(array_column($quote['lines'], 'error')));
@@ -51,14 +53,25 @@ class OrderService
                 throw ValidationException::withMessages(['cart' => $problems]);
             }
 
+            if ($quote['coupon_error']) {
+                throw ValidationException::withMessages(['coupon_code' => [$quote['coupon_error']]]);
+            }
+
             foreach ($quote['lines'] as $line) {
                 $this->takeStock($line);
+            }
+
+            $couponCode = $quote['coupon']['code'] ?? null;
+
+            if ($couponCode && !Coupon::takeUse($couponCode)) {
+                throw ValidationException::withMessages(['coupon_code' => ['Ten kod rabatowy został już wykorzystany']]);
             }
 
             $order = Order::create([
                 'customer_id' => $customer->id,
                 'subtotal_amount' => $quote['subtotal'],
                 'discount_amount' => $quote['discount'],
+                'coupon_code' => $couponCode,
                 'total_amount' => $quote['total'],
                 'status' => 'pending',
                 'payment_method' => $checkout['payment_method'],
@@ -116,6 +129,10 @@ class OrderService
 
             if ($status === 'cancelled') {
                 $this->returnStock($locked);
+
+                if ($locked->coupon_code) {
+                    Coupon::releaseUse($locked->coupon_code);
+                }
 
                 if ($locked->payment_status === 'paid') {
                     $locked->payment_status = 'refunded';

@@ -69,6 +69,7 @@ class OrderController extends Controller
                     'billing_address' => $this->billingAddress($validated),
                     'shipping_address' => $this->shippingAddress($validated),
                     'payment_details' => $this->paymentDetails($validated),
+                    'coupon_code' => $validated['coupon_code'] ?? null,
                 ]);
 
                 $response = [
@@ -139,6 +140,7 @@ class OrderController extends Controller
             'shipping.city' => 'required_with:shipping|string|max:255',
             'shipping.postal_code' => 'required_with:shipping|string|max:10',
             'shipping.country' => 'required_with:shipping|string|max:255',
+            'coupon_code' => 'nullable|string|max:64',
             'cart_items' => 'required|array|min:1|max:100',
             'cart_items.*.product_id' => 'required|integer|exists:products,id',
             'cart_items.*.quantity' => 'required|integer|min:1|max:99',
