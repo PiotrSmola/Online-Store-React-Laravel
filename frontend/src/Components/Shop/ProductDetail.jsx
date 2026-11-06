@@ -3,10 +3,17 @@ import PropTypes from 'prop-types';
 import { Link, useParams } from 'react-router';
 import { useCartActions } from '../../Context/useShop';
 import { useToast } from '../../Context/useToast';
-import { useCategoryProducts, useProduct } from '../../hooks/useCatalog';
+import { useProduct } from '../../hooks/useCatalog';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { formatPrice } from '../../lib/format';
-import { categoryPath, cleanOptions } from '../../lib/product';
+import {
+  categoryPath,
+  cleanOptions,
+  colorOptions,
+  findVariant,
+  firstBuyableVariant,
+  sizeOptions,
+  stockText,
+} from '../../lib/product';
 import Button, { ButtonLink } from '../ui/Button';
 import EmptyState from '../ui/EmptyState';
 import PageHeading from '../ui/PageHeading';
@@ -14,17 +21,28 @@ import QuantityStepper from '../ui/QuantityStepper';
 import Select from '../ui/Select';
 import Skeleton from '../ui/Skeleton';
 import Stars from '../ui/Stars';
+import Price from './Price';
 import ProductGrid from './ProductGrid';
 import ProductImage from './ProductImage';
+import ProductLabel from './ProductLabel';
+import ProductReviews from './ProductReviews';
+import WishlistToggle from './WishlistToggle';
 
-const RELATED_LIMIT = 4;
+const MAIN_IMAGE_SIZES = '(min-width: 64rem) 50vw, 100vw';
+const GALLERY_THUMB_SIZES = '25vw';
 
 function Gallery({ images, name }) {
   const [selected, setSelected] = useState(0);
 
   return (
     <div>
-      <ProductImage key={images[selected]?.id ?? 'default'} image={images[selected]} alt={name} priority="high" />
+      <ProductImage
+        key={images[selected]?.id ?? 'default'}
+        image={images[selected]}
+        alt={name}
+        priority="high"
+        sizes={MAIN_IMAGE_SIZES}
+      />
       {images.length > 1 && (
         <ul className="mt-2 grid grid-cols-4 gap-2">
           {images.map((image, index) => (
@@ -36,7 +54,7 @@ function Gallery({ images, name }) {
                 className="block w-full cursor-pointer"
                 onClick={() => setSelected(index)}
               >
-                <ProductImage image={image} alt="" thumbnail />
+                <ProductImage image={image} alt="" thumbnail sizes={GALLERY_THUMB_SIZES} />
               </button>
             </li>
           ))}
@@ -52,16 +70,47 @@ Gallery.propTypes = {
 };
 
 function BuyForm({ product }) {
+  const variants = useMemo(() => product.variants ?? [], [product.variants]);
   const sizes = useMemo(() => cleanOptions(product.rozmiar), [product.rozmiar]);
   const colors = useMemo(() => cleanOptions(product.kolor), [product.kolor]);
-  const [size, setSize] = useState(sizes[0] ?? null);
-  const [color, setColor] = useState(colors[0] ?? null);
+  const first = firstBuyableVariant(variants);
+  const [size, setSize] = useState(first?.size || null);
+  const [color, setColor] = useState(first?.color || null);
   const [quantity, setQuantity] = useState(1);
   const { addItem } = useCartActions();
   const toast = useToast();
 
+  const variant = findVariant(variants, size, color);
+  const stock = variant?.stock ?? 0;
+
+  const handleSizeChange = (event) => {
+    const nextSize = event.target.value;
+    const stillBuyable = findVariant(variants, nextSize, color)?.stock > 0;
+
+    setSize(nextSize);
+    setQuantity(1);
+    if (!stillBuyable) {
+      const match = variants.find((candidate) => candidate.size === nextSize && candidate.stock > 0);
+      if (match) setColor(match.color || null);
+    }
+  };
+
+  const handleColorChange = (event) => {
+    const nextColor = event.target.value;
+    const stillBuyable = findVariant(variants, size, nextColor)?.stock > 0;
+
+    setColor(nextColor);
+    setQuantity(1);
+    if (!stillBuyable) {
+      const match = variants.find((candidate) => candidate.color === nextColor && candidate.stock > 0);
+      if (match) setSize(match.size || null);
+    }
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
+    if (stock <= 0) return;
+
     addItem({ product_id: product.id, size, color, quantity });
     toast.success(`Dodano do koszyka: ${product.nazwa}`);
   };
@@ -69,16 +118,31 @@ function BuyForm({ product }) {
   return (
     <form onSubmit={handleSubmit} className="mt-8 max-w-sm space-y-5">
       {sizes.length > 0 && (
-        <Select label="Rozmiar" options={sizes} value={size} onChange={(event) => setSize(event.target.value)} />
+        <Select
+          label="Rozmiar"
+          options={sizeOptions(variants, sizes, color)}
+          value={size ?? ''}
+          onChange={handleSizeChange}
+        />
       )}
       {colors.length > 0 && (
-        <Select label="Kolor" options={colors} value={color} onChange={(event) => setColor(event.target.value)} />
+        <Select
+          label="Kolor"
+          options={colorOptions(variants, colors, size)}
+          value={color ?? ''}
+          onChange={handleColorChange}
+        />
       )}
-      <div>
-        <p className="mb-1 font-medium">Ilość</p>
-        <QuantityStepper value={quantity} onChange={setQuantity} />
-      </div>
-      <Button type="submit" block>
+      <p role="status" className={stock > 0 ? 'text-stone' : 'font-medium text-ember'}>
+        {stockText(stock)}
+      </p>
+      {stock > 0 && (
+        <div>
+          <p className="mb-1 font-medium">Ilość</p>
+          <QuantityStepper value={quantity} max={stock} onChange={setQuantity} />
+        </div>
+      )}
+      <Button type="submit" block disabled={stock <= 0}>
         Dodaj do koszyka
       </Button>
     </form>
@@ -86,26 +150,6 @@ function BuyForm({ product }) {
 }
 
 BuyForm.propTypes = {
-  product: PropTypes.object.isRequired,
-};
-
-function RelatedProducts({ product }) {
-  const { data } = useCategoryProducts(product.kategoria, { limit: RELATED_LIMIT + 1 });
-  const related = (data?.items ?? []).filter((item) => item.id !== product.id).slice(0, RELATED_LIMIT);
-
-  if (related.length === 0) return null;
-
-  return (
-    <section aria-labelledby="related-products" className="mt-20">
-      <h2 id="related-products" className="mb-6 text-2xl lg:text-3xl">
-        Z tej samej kategorii
-      </h2>
-      <ProductGrid products={related} />
-    </section>
-  );
-}
-
-RelatedProducts.propTypes = {
   product: PropTypes.object.isRequired,
 };
 
@@ -129,13 +173,21 @@ function ProductView({ product }) {
         <Gallery images={product.images ?? []} name={product.nazwa} />
         <div className="lg:sticky lg:top-8 lg:self-start">
           <PageHeading>{product.nazwa}</PageHeading>
-          <p className="mt-3 text-2xl font-semibold">{formatPrice(product.cena)}</p>
           <div className="mt-3">
-            <Stars rating={product.ocena} />
+            <ProductLabel product={product} />
           </div>
-          <p className="mt-6 max-w-prose">{product.opis}</p>
-          <BuyForm key={product.id} product={product} />
-          <p className="mt-8 text-stone">
+          <Price product={product} className="text-2xl" />
+          {product.reviews_count > 0 && (
+            <div className="mt-3">
+              <Stars rating={product.ocena} />
+            </div>
+          )}
+          <p className="mt-6 max-w-prose whitespace-pre-line">{product.opis}</p>
+          <BuyForm product={product} />
+          <div className="mt-4">
+            <WishlistToggle productId={product.id} />
+          </div>
+          <p className="mt-6 text-stone">
             Kategoria:{' '}
             <Link to={categoryPath(product.kategoria)} className="text-pine underline underline-offset-4">
               {product.kategoria}
@@ -143,7 +195,17 @@ function ProductView({ product }) {
           </p>
         </div>
       </div>
-      <RelatedProducts product={product} />
+
+      <ProductReviews product={product} />
+
+      {product.related?.length > 0 && (
+        <section aria-labelledby="related-products" className="mt-16">
+          <h2 id="related-products" className="mb-6 text-2xl lg:text-3xl">
+            Z tej samej kategorii
+          </h2>
+          <ProductGrid products={product.related} />
+        </section>
+      )}
     </>
   );
 }
