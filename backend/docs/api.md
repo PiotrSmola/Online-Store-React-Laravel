@@ -44,7 +44,7 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 | `POST /customer/register` | 5 | IP |
 | `POST /customer/forgot-password` | 5 | IP |
 | `POST /customer/reset-password` | 10 | IP |
-| `POST /orders` | 20 | IP |
+| `POST /orders` | 20, plus the open order limits below | IP |
 | `POST /cart/quote` with a coupon | 30 | IP |
 | `POST /cart/quote` without a coupon | 120 | IP |
 | `POST /products/{product}/reviews` | 10 | customer |
@@ -68,7 +68,7 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 **Quote**, returned by `POST /cart/quote`, `GET /cart` and `PUT /cart`:
 
 ```json
-{"lines":[{"key":"20:L:Czarny", "variant_id":155,
+{"lines":[{"key":"20:L:Czarny", "product_id":20, "variant_id":155,
            "product":{"...":"product card fields without stock_total", "is_active":true},
            "size":"L", "color":"Czarny", "quantity":1, "unit_price":159.99, "line_total":159.99,
            "stock":15, "available":true, "error":null}],
@@ -79,7 +79,8 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 
 - `unit_price` is the effective price.
 - A line with a problem has `available: false` and a Polish `error`, and stays out of `subtotal`. `stock` is what that variant has, so a selector can offer it.
-- `product` is `null` when the product no longer exists.
+- A sold out product stays a full line with its details and `stock: 0`.
+- A product that is hidden or no longer exists gives a line with only `key`, `product_id`, `size`, `color`, `quantity` and the `error`: `product` is `null` and the amounts are 0. Offer to remove it.
 - `delivery_price` is `null` until a method is chosen, and `total` then has no delivery.
 - `delivery_options` already include free delivery, which applies when subtotal minus discount reaches `free_delivery_from`.
 - Equal size and color pairs of one product are merged into one line.
@@ -103,7 +104,7 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
  "payment_details":{"method":"card", "card_last_four":"4242"},
  "invoice_number":null, "order_date":"2026-11-06T11:56:06.000000Z", "created_at":"...", "updated_at":"...",
  "items":[{"id":1, "order_id":1, "product_id":20, "quantity":2, "price":"159.99",
-           "selected_size":"L", "selected_color":"Czarny",
+           "product_name":"...", "selected_size":"L", "selected_color":"Czarny",
            "product":{"id":20, "nazwa":"...", "kategoria":"...", "cena":"159.99", "images":[]}}],
  "status_events":[{"id":1, "order_id":1, "status":"pending", "status_label":"Oczekuje na realizację",
                    "note":null, "created_at":"...", "updated_at":"..."}]}
@@ -113,7 +114,8 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 - `payment_status`: `unpaid`, `paid`, `failed`, `refunded`.
 - `pickup_point` is present only for `pickup_point` delivery. `card_last_four` appears after a card payment. `payment_details.instructions` is there for transfer and cash.
 - `selected_size` and `selected_color` are `null` for a product without that option.
-- `items.*.price` is the unit price actually paid and never changes. `items.*.product` is the product today, with only the fields shown here, so use `price` for anything about the order.
+- `items.*.price` and `items.*.product_name` are the unit price paid and the name at purchase, and never change. `items.*.product` is the product today, with only the fields shown here, so use it for the photo and link and the other two for anything about the order.
+- A card or transfer order still unpaid after 48 hours (`SHOP_UNPAID_ORDER_HOURS`) is cancelled automatically: stock and the coupon use come back, `status_events` gets a note, and the customer gets an email. Cash for store pickup does not expire.
 
 **Customer**, returned by the account routes. The password is never included:
 
@@ -321,6 +323,8 @@ Note the names differ from the cart: `selected_size` here, `size` there.
 
 The final check of stock and coupon limits happens here, so a line that was fine in the quote can still fail.
 
+**Open order limits.** An unpaid order holds stock, so one customer can have 5 and one IP address 10 open orders, meaning `pending` and not paid. Over either limit the answer is a 429 and nothing is saved: tell the person to pay or cancel an earlier order. Paying, cancelling and expiry each free a place.
+
 ### GET /orders 🔒
 
 *Paged*, 20 per page, newest first, `data` holds orders.
@@ -345,12 +349,12 @@ Simulated card payment. Owner only, card orders only.
 |---|---|
 | Accepted | 200 with the order: `paid`, `processing`, `paid_at` set |
 | Card ending in `0002` | 402: `{"message":"...", "order":{...}}`, `payment_status` is `failed`, retry allowed |
-| Already paid, cancelled or refunded | 409 |
+| Already paid, cancelled or refunded, or placed before online payment existed | 409 |
 | Not a card order | 422 with `errors.payment` |
 
 ### GET /orders/{order}/invoice 🔒
 
-PDF download for the owner, `application/pdf` with a `Content-Disposition` file name. Fetch it with the bearer header and save the blob. 409 until the order is paid.
+PDF download for the owner, `application/pdf` with a `Content-Disposition` file name. Fetch it with the bearer header and save the blob. 409 until the order is paid. A refunded order keeps an invoice that was already issued, marked as refunded, and gets a 409 if none was.
 
 ## Contact
 
@@ -374,13 +378,13 @@ Double opt-in: an address receives nothing until its owner follows the link in t
 
 ### POST /newsletter/subscribe
 
-Body: `email`. The same 200 reply for every valid address, whether new, waiting or already confirmed, so the reply never reveals who is subscribed. A confirmation is sent at most once in 10 minutes.
+Body: `email`. The same 200 reply for every valid address, whether new, waiting or already confirmed, so the reply never reveals who is subscribed. A confirmation is sent at most once in 10 minutes; a later request replaces the earlier links with new ones.
 
 The email links to `{APP_URL}/newsletter/confirm?token=...` and `{APP_URL}/newsletter/unsubscribe?token=...`. These are frontend pages, which send the token to the two routes below.
 
 ### POST /newsletter/confirm
 
-Body: `token`. 200: `{"message":"..."}`. A wrong or used token gives a 422 with `errors.token`.
+Body: `token`. 200: `{"message":"..."}`. A wrong, used or expired token gives a 422 with `errors.token`. The link works for 7 days, after which the unconfirmed address is deleted.
 
 ### POST /newsletter/unsubscribe
 
@@ -421,6 +425,8 @@ Query: `q`, `page`. *Paged*, 20 per page, product cards with `is_active`, inacti
 
 `rozmiar` and `kolor` are derived from `variants`. 201 with the product: card fields plus `opis`, `is_active`, `images`, `variants`.
 
+Sent `original_stock` is ignored here, as there is no stock to compare with yet.
+
 ### GET /admin/products/{product}
 
 The same shape, also for inactive products.
@@ -428,6 +434,16 @@ The same shape, also for inactive products.
 ### PUT /admin/products/{product}
 
 Same fields, all optional. `variants`, when sent, is the full list: matching rows are updated, new ones added, missing ones deleted. `sale_price` is checked against the resulting `cena`, so lowering `cena` under an existing sale is a 422 with `errors.sale_price` unless the same request changes or clears the sale.
+
+**Stock is applied as a difference, so orders placed while the form was open stay counted.** Each variant that already exists must also send `variants.*.original_stock`: the value the form loaded from `GET /admin/products/{product}`. Without it the request is a 422 with `errors["variants.0.original_stock"]` and nothing is saved. The server adds `stock - original_stock` to the current stock and stops at 0.
+
+| Loaded | Sold meanwhile | Form sends | Result |
+|---|---|---|---|
+| 10 | 3 | `stock:10, original_stock:10` (unchanged) | 7 |
+| 10 | 3 | `stock:15, original_stock:10` | 12 |
+| 10 | 3 | `stock:1, original_stock:10` | 0 |
+
+A new variant needs only `stock`. The response carries the real result, so show that rather than what was typed, and reload the form before the next save.
 
 ### DELETE /admin/products/{product}
 

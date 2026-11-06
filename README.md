@@ -87,6 +87,8 @@ There is no payment provider. The checkout page checks the card number itself an
 
 Any future expiry date and any 3 digit CVV work. Bank transfers and cash are confirmed by an admin in the panel. Cash is available only with store pickup.
 
+An unpaid order holds its stock, so card and transfer orders still unpaid after 48 hours are cancelled automatically and the customer is told by email. Change the time with `SHOP_UNPAID_ORDER_HOURS` in `.env`. Cash for store pickup does not expire. One customer can have 5 unpaid orders open and one IP address 10. The address is stored only as a keyed hash.
+
 ### Architecture
 
 ```
@@ -94,8 +96,11 @@ browser ──► frontend (nginx :80) ──► /            React build (SPA)
                                  ├─► /api/*       ─┐
                                  └─► /storage/*   ─┴─► backend (PHP 8.3 + Apache) ──► db (MySQL 8.4)
 
-queue (php artisan queue:work) ──► db, mailpit
+queue (php artisan queue:work)      ──► db, mailpit
+scheduler (php artisan schedule:work) ──► db
 ```
+
+The `scheduler` service cancels unpaid orders hourly and removes unconfirmed newsletter addresses daily. `routes/console.php` holds the schedule.
 
 Uploaded photos and thumbnails live in the `product_images` volume, so they survive rebuilding the images. A new volume starts with the photos baked into the image.
 
@@ -116,7 +121,7 @@ docker compose exec backend php artisan shop:thumbnails   # create missing thumb
 
 > **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database. It also creates variants, the coupons `WITAJ10` (10%) and `MINUS20` (20 zł from 150 zł), six demo customers and reviews, and marks a few products as on sale or new.
 >
-> **Upgrading an existing database:** the migrations add variants with a stock of 10 for every existing product, but `--if-empty` skips an existing shop, so coupons, demo customers and reviews appear only after `migrate:fresh` and a seed.
+> **Upgrading an existing database:** just run the setup script. The migrations add variants with a stock of 10 for every existing product. Old card orders count as paid, because the old checkout took the card with the order, and each old order gets one status event. Old orders never took stock, so cancelling one adds none back. On every start the container runs `shop:seed --if-empty`, which imports products only into an empty shop and fills coupons, demo customers and reviews only while each of those is empty, so nothing is duplicated and a coupon an admin deleted does not come back. A plain `shop:seed` restores individual missing coupons and reviews, and also imports the products again.
 
 ## 📋 Prerequisites (manual setup without Docker)
 
@@ -275,7 +280,10 @@ Delivery is free from 300 zł after the discount. Prices, lockers and the seller
 - **Locked transactions** for stock, coupon limits and payments
 - **Upload checks** on the real file content, with random server-side names
 - **No card data** on the server, and no sensitive data in logs
+- **Limits on unpaid orders**, so nobody can hold a product's stock without paying
 - **Password Hashing** using Laravel's built-in hashing
+
+Registration and checkout say when an email already has an account, which lets someone test whether an address is registered. This is a deliberate usability trade-off: the person needs to know to log in instead. Rate limits slow it down. Forgot-password and the newsletter give the same reply either way.
 
 ## 📝 Environment Variables
 
@@ -299,6 +307,8 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=choose-a-long-password
+
+SHOP_UNPAID_ORDER_HOURS=48
 
 SHOP_CONTACT_EMAIL=kontakt@sklep.example
 SHOP_CONTACT_PHONE="+48 000 000 000"
