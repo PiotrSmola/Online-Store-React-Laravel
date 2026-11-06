@@ -198,6 +198,10 @@ ShopProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
 
+export function productHasOptions(product) {
+  return product.rozmiar?.length > 0 || product.kolor?.length > 0;
+}
+
 export function useShop() {
   const context = useContext(ShopContext);
   if (!context) {

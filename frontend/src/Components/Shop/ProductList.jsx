@@ -1,9 +1,19 @@
-import { Link } from "react-router-dom";
-import { useShop } from "../../Context/ShopContext";
+import { Link, useNavigate } from "react-router-dom";
+import { useShop, productHasOptions } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
 export default function ProductList() {
   const { products, loading, addToCart } = useShop();
+  const navigate = useNavigate();
+
+  // A product with a size or color can only be ordered after choosing one.
+  const handleBuyNow = (product) => {
+    if (productHasOptions(product)) {
+      navigate(`/product/${product.id}`);
+    } else {
+      addToCart(product);
+    }
+  };
 
   if (loading) {
     return <div className="w3-container w3-center w3-padding-64">Ładowanie...</div>;
@@ -51,7 +61,7 @@ export default function ProductList() {
                 <div className="w3-display-middle w3-display-hover">
                   <button 
                     className="w3-button w3-black"
-                    onClick={() => addToCart(product)}
+                    onClick={() => handleBuyNow(product)}
                   >
                     Kup teraz <i className="fa fa-shopping-cart"></i>
                   </button>

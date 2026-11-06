@@ -37,7 +37,7 @@ class OrderController extends Controller
                 'payment_method' => 'required|in:card,transfer,cash',
                 'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_prices')))],
                 'cart_items' => 'required|array|min:1',
-                'cart_items.*.product_id' => 'required|exists:products,id',
+                'cart_items.*.product_id' => 'required|integer|exists:products,id',
                 'cart_items.*.quantity' => 'required|integer|min:1',
                 'cart_items.*.selected_size' => 'nullable|string',
                 'cart_items.*.selected_color' => 'nullable|string',
@@ -55,9 +55,10 @@ class OrderController extends Controller
             Log::info('Dane po walidacji:', $validatedData);
 
             $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
+            $orderItems = $this->buildOrderItems($request->cart_items);
 
             // Failure paths must throw: a response returned from this closure would commit.
-            return DB::transaction(function () use ($request, $customer, $authenticatedCustomer) {
+            return DB::transaction(function () use ($request, $customer, $authenticatedCustomer, $orderItems) {
                 $customerData = [
                     'first_name' => $request->first_name,
                     'last_name' => $request->last_name,
@@ -82,29 +83,9 @@ class OrderController extends Controller
                     Log::info('Utworzono nowego klienta:', ['id' => $customer->id]);
                 }
 
-                $totalAmount = 0;
-                $orderItems = [];
-
-                foreach ($request->cart_items as $item) {
-                    $product = Product::find($item['product_id']);
-                    if (!$product) {
-                        throw new \Exception("Produkt o ID {$item['product_id']} nie istnieje");
-                    }
-
-                    $itemTotal = $product->cena * $item['quantity'];
-                    $totalAmount += $itemTotal;
-
-                    $orderItems[] = [
-                        'product_id' => $product->id,
-                        'quantity' => $item['quantity'],
-                        'price' => $product->cena,
-                        'selected_size' => $item['selected_size'] ?? null,
-                        'selected_color' => $item['selected_color'] ?? null,
-                    ];
-                }
-
+                $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
                 $deliveryPrice = config('shop.delivery_prices')[$request->delivery_method];
-                $totalAmount = round($totalAmount + $deliveryPrice, 2);
+                $totalAmount = round($itemsTotal + $deliveryPrice, 2);
 
                 Log::info('Obliczono pozycje zamówienia:', $orderItems);
 
@@ -217,6 +198,58 @@ class OrderController extends Controller
         }
 
         return null;
+    }
+
+    private function buildOrderItems(array $cartItems): array
+    {
+        $orderItems = [];
+        $errors = [];
+
+        foreach ($cartItems as $index => $item) {
+            $product = Product::findOrFail($item['product_id']);
+            $selectedSize = $item['selected_size'] ?? null;
+            $selectedColor = $item['selected_color'] ?? null;
+
+            if ($error = $this->optionError($product, 'rozmiar', $product->rozmiar, $selectedSize)) {
+                $errors["cart_items.{$index}.selected_size"] = [$error];
+            }
+
+            if ($error = $this->optionError($product, 'kolor', $product->kolor, $selectedColor)) {
+                $errors["cart_items.{$index}.selected_color"] = [$error];
+            }
+
+            $orderItems[] = [
+                'product_id' => $product->id,
+                'quantity' => $item['quantity'],
+                'price' => $product->cena,
+                'selected_size' => blank($selectedSize) ? null : $selectedSize,
+                'selected_color' => blank($selectedColor) ? null : $selectedColor,
+            ];
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $orderItems;
+    }
+
+    // $offered is the product's JSON column, which can be null or an empty list.
+    private function optionError(Product $product, string $label, mixed $offered, ?string $selected): ?string
+    {
+        $options = array_map('strval', array_filter((array) $offered, fn ($option) => !blank($option)));
+
+        if ($options === []) {
+            return blank($selected) ? null : "Produkt „{$product->nazwa}” nie ma opcji: {$label}";
+        }
+
+        if (blank($selected)) {
+            return "Wybierz {$label} produktu „{$product->nazwa}”";
+        }
+
+        return in_array($selected, $options, true)
+            ? null
+            : "Wybrany {$label} produktu „{$product->nazwa}” jest niedostępny";
     }
 
     // Exception messages can embed SQL bindings (emails, password hashes) and trace

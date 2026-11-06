@@ -575,8 +575,14 @@ export default function Checkout() {
               </div>
             )}
 
-            <button 
-              type="submit" 
+            {Object.entries(errors)
+              .filter(([field]) => field.startsWith('cart_items.'))
+              .map(([field, message]) => (
+                <p key={field} className="w3-text-red w3-small">{message}</p>
+              ))}
+
+            <button
+              type="submit"
               className="w3-button w3-green w3-padding-large w3-large w3-margin-top"
               disabled={loading}
             >
