@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useToast } from '../../Context/useToast';
 import { deleteProductImage, uploadProductImage } from '../../lib/admin';
@@ -17,6 +17,7 @@ function fileError(file) {
 /** Photos of a saved product. The server checks the real content of an upload. */
 export default function ProductImages({ productId, initialImages, name }) {
   const inputId = useId();
+  const input = useRef(null);
   const [images, setImages] = useState(initialImages);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -40,6 +41,7 @@ export default function ProductImages({ productId, initialImages, name }) {
     setError(problem);
     setFile(accepted ? chosen : null);
     setPreview(accepted ? URL.createObjectURL(chosen) : null);
+    if (problem) event.target.value = '';
   };
 
   const handleUpload = async () => {
@@ -51,6 +53,8 @@ export default function ProductImages({ productId, initialImages, name }) {
       setImages((current) => [...current, image]);
       setFile(null);
       setPreview(null);
+      input.current.value = '';
+      input.current.focus();
       toast.success('Dodano zdjęcie');
     } catch (requestError) {
       if (requestError.status !== 401) setError(requestError.errors?.image?.[0] ?? requestError.message);
@@ -104,7 +108,7 @@ export default function ProductImages({ productId, initialImages, name }) {
           Dodaj zdjęcie
         </label>
         <input
-          key={file ? 'chosen' : 'empty'}
+          ref={input}
           id={inputId}
           type="file"
           accept={ACCEPTED}
