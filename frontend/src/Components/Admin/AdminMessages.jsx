@@ -55,7 +55,11 @@ export default function AdminMessages() {
         Tylko nieprzeczytane
       </label>
 
-      <ListBody list={list} emptyTitle="Nie ma wiadomości">
+      <ListBody
+        list={list}
+        emptyTitle="Nie ma jeszcze wiadomości"
+        noResultsTitle={unreadOnly ? 'Nie ma nieprzeczytanych wiadomości' : undefined}
+      >
         <ul className="max-w-3xl space-y-8">
           {list.data?.items.map((message) => (
             <li key={message.id}>

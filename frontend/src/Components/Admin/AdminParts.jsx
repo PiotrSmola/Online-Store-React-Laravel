@@ -73,8 +73,8 @@ SearchBox.propTypes = {
 };
 
 /** The states every list shares: loading, failure, empty, then children and the pages. */
-export function ListBody({ list, emptyTitle, children }) {
-  const { data, error, loading, reload, hrefFor } = list;
+export function ListBody({ list, emptyTitle, noResultsTitle = 'Nie znaleźliśmy pasujących wyników', children }) {
+  const { data, error, loading, reload, hrefFor, query, setQuery } = list;
   const focusHeading = useFocusPageHeading();
 
   if (loading && !data) return <Spinner />;
@@ -89,7 +89,18 @@ export function ListBody({ list, emptyTitle, children }) {
     );
   }
 
-  if (data?.items.length === 0) return <EmptyState title={emptyTitle} />;
+  if (data?.items.length === 0) {
+    const narrowedBy = Object.keys(query);
+
+    if (narrowedBy.length === 0) return <EmptyState title={emptyTitle} />;
+
+    const showAll = () => {
+      setQuery(Object.fromEntries(narrowedBy.map((name) => [name, ''])));
+      focusHeading();
+    };
+
+    return <EmptyState title={noResultsTitle} action={<Button onClick={showAll}>Pokaż wszystkie</Button>} />;
+  }
 
   return (
     <div aria-busy={loading}>
@@ -107,5 +118,6 @@ export function ListBody({ list, emptyTitle, children }) {
 ListBody.propTypes = {
   list: PropTypes.object.isRequired,
   emptyTitle: PropTypes.string.isRequired,
+  noResultsTitle: PropTypes.string,
   children: PropTypes.node,
 };

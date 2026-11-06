@@ -34,7 +34,7 @@ export default function AdminOrders() {
         />
       </div>
 
-      <ListBody list={list} emptyTitle="Nie znaleźliśmy zamówień">
+      <ListBody list={list} emptyTitle="Nie ma jeszcze zamówień">
         <TableRegion label="Lista zamówień">
           <thead>
             <tr>

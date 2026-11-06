@@ -15,7 +15,7 @@ export default function AdminCustomers() {
         <SearchBox label="E-mail lub nazwisko" value={list.query.q ?? ''} onChange={(q) => list.setQuery({ q })} />
       </div>
 
-      <ListBody list={list} emptyTitle="Nie znaleźliśmy klientów">
+      <ListBody list={list} emptyTitle="Nie ma jeszcze klientów">
         <TableRegion label="Lista klientów">
           <thead>
             <tr>
