@@ -4,6 +4,7 @@ import { AUTH_STATUS } from '../../Context/authStatus';
 import { useAuth, useCartItems } from '../../Context/useShop';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import Spinner from '../ui/Spinner';
+import AuthCheckFailed from './AuthCheckFailed';
 import CheckoutForm from './CheckoutForm';
 
 export default function Checkout() {
@@ -17,6 +18,7 @@ export default function Checkout() {
   if (placed) return <Spinner label="Składamy zamówienie" />;
   if (items.length === 0) return <Navigate to="/cart" replace />;
   if (status === AUTH_STATUS.loading) return <Spinner />;
+  if (status === AUTH_STATUS.unknown) return <AuthCheckFailed />;
 
   return <CheckoutForm key={customer?.id ?? 'guest'} customer={customer} onPlaced={() => setPlaced(true)} />;
 }

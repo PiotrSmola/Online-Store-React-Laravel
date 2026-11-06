@@ -7,6 +7,7 @@ import { buildOrderPayload, formatCardNumber, formatExpiry, initialCheckoutForm,
 import { formatPrice } from '../../lib/format';
 import { placeOrder } from '../../lib/orders';
 import { loginPath } from '../../lib/redirect';
+import { verifySession } from '../../lib/session';
 import { DELIVERY_METHODS, PAYMENT_METHODS } from '../../lib/shopConfig';
 import Button from '../ui/Button';
 import ErrorSummary from '../ui/ErrorSummary';
@@ -124,6 +125,10 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
     setSubmitting(true);
 
     try {
+      // The orders endpoint treats a dead token as a guest, which would leave this signed-in form
+      // with no password field and no way forward. A refused token redirects to login here.
+      if (!isGuest) await verifySession();
+
       const result = await placeOrder(buildOrderPayload(form, items, { isGuest }));
 
       onPlaced();
@@ -131,6 +136,8 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
       clear();
       navigate('/order-success', { state: { order: result.order } });
     } catch (error) {
+      if (error.status === 401) return;
+
       const hasFieldErrors = Object.keys(error.errors ?? {}).length > 0;
       fail(error.errors ?? {}, hasFieldErrors ? null : error.message);
       setSubmitting(false);
@@ -208,8 +215,8 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
                 {isGuest &&
                   textField('password', 'Hasło', {
                     type: 'password',
-                    autoComplete: 'new-password',
-                    hint: 'Założymy konto, w którym sprawdzisz zamówienie.',
+                    autoComplete: 'current-password',
+                    hint: 'Nowe konto założymy przy zamówieniu. Jeśli już je masz, wpisz swoje hasło.',
                   })}
               </div>
               <div className={ROW}>
