@@ -2,10 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Models\ContactMessage;
+use App\Models\Coupon;
 use App\Models\Customer;
+use App\Models\ProductImage;
+use App\Models\Review;
+use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Tests\Feature\Concerns\BuildsAdmins;
 use Tests\Feature\Concerns\BuildsOrders;
 use Tests\TestCase;
@@ -74,14 +80,89 @@ class AdminAccessTest extends TestCase
         $this->withToken($token)->getJson('/api/admin/stats')->assertForbidden();
     }
 
-    public function test_admins_get_past_the_middleware(): void
+    /**
+     * What each route answers an admin who sends no body. A 422 names the field that proves the
+     * controller's own validation ran; a 200 names a key only that route returns. The list
+     * runs in order against one set of records, so a route added without an entry fails here.
+     *
+     * @return array<string, array{int, string}>
+     */
+    private function adminExpectations(): array
     {
+        return [
+            'GET api/admin/stats' => [200, 'orders_by_status'],
+            'GET api/admin/products' => [200, 'data'],
+            'POST api/admin/products' => [422, 'nazwa'],
+            'GET api/admin/products/{product}' => [200, 'variants'],
+            'PUT api/admin/products/{product}' => [200, 'variants'],
+            'POST api/admin/products/{product}/images' => [422, 'image'],
+            'DELETE api/admin/products/{product}/images/{image}' => [200, 'message'],
+            'GET api/admin/orders' => [200, 'data'],
+            'GET api/admin/orders/{order}' => [200, 'status_events'],
+            'PATCH api/admin/orders/{order}/status' => [422, 'status'],
+            'PATCH api/admin/orders/{order}/payment' => [200, 'paid_at'],
+            'GET api/admin/orders/{order}/invoice' => [200, 'application/pdf'],
+            'GET api/admin/customers' => [200, 'data'],
+            'GET api/admin/coupons' => [200, 'data'],
+            'POST api/admin/coupons' => [422, 'code'],
+            'GET api/admin/coupons/{coupon}' => [200, 'used_count'],
+            'PUT api/admin/coupons/{coupon}' => [200, 'used_count'],
+            'DELETE api/admin/coupons/{coupon}' => [200, 'message'],
+            'DELETE api/admin/reviews/{review}' => [200, 'message'],
+            'GET api/admin/messages' => [200, 'data'],
+            'PATCH api/admin/messages/{message}/read' => [200, 'read_at'],
+            'DELETE api/admin/messages/{message}' => [200, 'message'],
+            'GET api/admin/newsletter' => [200, 'data'],
+            'GET api/admin/newsletter/export' => [200, 'text/csv'],
+            'DELETE api/admin/products/{product}' => [200, 'deleted'],
+        ];
+    }
+
+    public function test_every_admin_route_is_listed_with_what_it_answers(): void
+    {
+        $this->assertEqualsCanonicalizing(
+            array_map(fn (array $route) => "{$route[0]} {$route[1]}", $this->adminRoutes()),
+            array_keys($this->adminExpectations())
+        );
+    }
+
+    public function test_admins_reach_each_controller_and_get_its_real_answer(): void
+    {
+        Storage::fake('public');
+        $product = $this->createProduct();
+        $customer = $this->createCustomer();
+
+        $ids = [
+            '{product}' => $product->id,
+            '{image}' => ProductImage::create(['product_id' => $product->id, 'image_path' => 'a.jpg', 'order' => 0])->id,
+            '{coupon}' => Coupon::create(['code' => 'TEST', 'type' => 'percent', 'value' => 10])->id,
+            '{review}' => Review::create(['product_id' => $product->id, 'customer_id' => $customer->id, 'rating' => 5])->id,
+            '{message}' => ContactMessage::create(['name' => 'A', 'email' => 'a@example.com', 'subject' => 'S', 'message' => 'M'])->id,
+            '{order}' => app(OrderService::class)->place($customer, [
+                'items' => [['product_id' => $product->id, 'quantity' => 1, 'size' => 'M', 'color' => 'Czarny']],
+                'payment_method' => 'transfer',
+                'delivery_method' => 'courier',
+                'billing_address' => [],
+                'shipping_address' => [],
+                'payment_details' => ['method' => 'transfer'],
+            ])->id,
+        ];
+
         $this->actingAs($this->createAdmin(), 'sanctum');
 
-        foreach ($this->adminRoutes() as [$method, $uri]) {
-            $status = $this->callWithMissingIds($method, $uri)->getStatusCode();
+        foreach ($this->adminExpectations() as $route => [$status, $proof]) {
+            [$method, $uri] = explode(' ', $route);
+            $response = $this->json($method, '/' . strtr($uri, $ids));
 
-            $this->assertNotContains($status, [401, 403, 500], "{$method} {$uri}");
+            $this->assertSame($status, $response->getStatusCode(), $route);
+
+            if ($status === 422) {
+                $response->assertJsonValidationErrors([$proof]);
+            } elseif (str_contains($proof, '/')) {
+                $this->assertStringStartsWith($proof, $response->headers->get('Content-Type'), $route);
+            } else {
+                $this->assertArrayHasKey($proof, $response->json(), $route);
+            }
         }
     }
 
