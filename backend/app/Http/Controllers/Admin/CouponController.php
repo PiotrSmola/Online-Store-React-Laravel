@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Coupon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CouponController extends Controller
 {
@@ -47,9 +48,8 @@ class CouponController extends Controller
         }
 
         $required = $coupon ? 'sometimes|required' : 'required';
-        $type = $request->input('type', $coupon?->type);
 
-        return $request->validate([
+        $validated = $request->validate([
             'code' => [
                 ...explode('|', $required),
                 'string',
@@ -58,11 +58,26 @@ class CouponController extends Controller
                 Rule::unique('coupons', 'code')->ignore($coupon),
             ],
             'type' => [...explode('|', $required), Rule::in(Coupon::TYPES)],
-            'value' => [...explode('|', $required), 'numeric', 'min:0.01', $type === 'percent' ? 'max:100' : 'max:99999999.99'],
+            'value' => [...explode('|', $required), 'numeric', 'min:0.01', 'max:99999999.99'],
             'min_order' => 'sometimes|numeric|min:0|max:99999999.99',
             'max_uses' => 'sometimes|nullable|integer|min:1',
             'expires_at' => 'sometimes|nullable|date',
             'is_active' => 'sometimes|boolean',
         ]);
+
+        $this->rejectPercentOverAHundred($validated, $coupon);
+
+        return $validated;
+    }
+
+    // Checked on the coupon as it will be afterwards: a request can change either field alone.
+    private function rejectPercentOverAHundred(array $validated, ?Coupon $coupon): void
+    {
+        $type = $validated['type'] ?? $coupon?->type;
+        $value = $validated['value'] ?? $coupon?->value;
+
+        if ($type === 'percent' && (float) $value > 100) {
+            throw ValidationException::withMessages(['value' => ['Rabat procentowy nie może przekraczać 100%.']]);
+        }
     }
 }

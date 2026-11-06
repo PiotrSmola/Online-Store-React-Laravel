@@ -603,6 +603,35 @@ class AdminApiTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors([$field]);
     }
 
+    public function test_a_fixed_coupon_over_100_cannot_be_switched_to_percent_alone(): void
+    {
+        $coupon = Coupon::create(['code' => 'DUZY', 'type' => 'fixed', 'value' => 150]);
+
+        $this->putJson("/api/admin/coupons/{$coupon->id}", ['type' => 'percent'])
+            ->assertStatus(422)->assertJsonValidationErrors(['value']);
+
+        $this->assertSame('fixed', $coupon->fresh()->type);
+    }
+
+    public function test_a_percent_coupon_cannot_be_raised_over_100_alone(): void
+    {
+        $coupon = Coupon::create(['code' => 'PROCENT', 'type' => 'percent', 'value' => 50]);
+
+        $this->putJson("/api/admin/coupons/{$coupon->id}", ['value' => 150])
+            ->assertStatus(422)->assertJsonValidationErrors(['value']);
+
+        $this->assertSame('50.00', $coupon->fresh()->value);
+    }
+
+    public function test_type_and_value_can_change_together(): void
+    {
+        $coupon = Coupon::create(['code' => 'DUZY', 'type' => 'fixed', 'value' => 150]);
+
+        $this->putJson("/api/admin/coupons/{$coupon->id}", ['type' => 'percent', 'value' => 15])->assertOk();
+
+        $this->putJson("/api/admin/coupons/{$coupon->id}", ['type' => 'fixed', 'value' => 150])->assertOk();
+    }
+
     public function test_fixed_coupon_can_exceed_100(): void
     {
         $this->postJson('/api/admin/coupons', ['code' => 'DUZY', 'type' => 'fixed', 'value' => 500])->assertCreated();
