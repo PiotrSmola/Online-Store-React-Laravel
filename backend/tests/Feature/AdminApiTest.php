@@ -522,6 +522,14 @@ class AdminApiTest extends TestCase
         $this->assertDatabaseCount('coupons', 0);
     }
 
+    public function test_a_new_coupon_has_every_field(): void
+    {
+        $this->postJson('/api/admin/coupons', ['code' => 'NOWY', 'type' => 'fixed', 'value' => 5])->assertCreated()
+            ->assertJsonPath('min_order', '0.00')
+            ->assertJsonPath('max_uses', null)
+            ->assertJsonPath('expires_at', null);
+    }
+
     public function test_coupon_code_is_unique_ignoring_case(): void
     {
         Coupon::create(['code' => 'WITAJ10', 'type' => 'percent', 'value' => 10]);

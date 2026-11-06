@@ -43,8 +43,9 @@ class CustomerAuthController extends Controller
             throw ValidationException::withMessages(['email' => [self::ACCOUNT_EXISTS_MESSAGE]]);
         }
 
+        // Refreshed so the response has every column, also those filled by database defaults.
         return response()->json([
-            'customer' => $customer,
+            'customer' => $customer->refresh(),
             'token' => $customer->createToken('customer-token')->plainTextToken,
         ], 201);
     }

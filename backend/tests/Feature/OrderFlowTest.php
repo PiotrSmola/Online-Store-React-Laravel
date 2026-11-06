@@ -74,6 +74,19 @@ class OrderFlowTest extends TestCase
             ->assertJsonPath('order.status_events.0.status_label', 'Oczekuje na realizację');
     }
 
+    public function test_a_new_order_has_the_same_keys_as_a_stored_one(): void
+    {
+        $customer = $this->createCustomer();
+        $this->actingAs($customer, 'sanctum');
+
+        $placed = $this->order($this->createProduct())->assertOk()
+            ->assertJsonPath('order.paid_at', null)
+            ->assertJsonPath('order.invoice_number', null)
+            ->json('order');
+
+        $this->assertEqualsCanonicalizing(array_keys($placed), array_keys($this->getJson("/api/orders/{$placed['id']}")->json()));
+    }
+
     public function test_free_delivery_applies_on_the_server(): void
     {
         $product = $this->createProduct(['cena' => 150]);

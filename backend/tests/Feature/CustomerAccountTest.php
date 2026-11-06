@@ -56,6 +56,22 @@ class CustomerAccountTest extends TestCase
         $this->withToken($response->json('token'))->getJson('/api/customer/me')->assertOk();
     }
 
+    public function test_a_new_account_has_the_same_keys_as_an_existing_one(): void
+    {
+        $token = $this->register()->assertCreated()
+            ->assertJsonPath('customer.address', null)
+            ->assertJsonPath('customer.country', 'Polska')
+            ->assertJsonPath('customer.customer_type', 'individual')
+            ->json();
+
+        $this->app['auth']->forgetGuards();
+
+        $this->assertEqualsCanonicalizing(
+            array_keys($token['customer']),
+            array_keys($this->withToken($token['token'])->getJson('/api/customer/me')->json())
+        );
+    }
+
     public function test_is_admin_cannot_be_registered(): void
     {
         $this->register(['is_admin' => true])->assertCreated();

@@ -47,7 +47,7 @@ class ProductController extends Controller
     {
         $validated = $this->validated($request, isUpdate: false);
 
-        return response()->json($this->withDetails($this->products->create($validated)), 201);
+        return response()->json($this->withDetails($this->products->create($validated)->refresh()), 201);
     }
 
     public function update(Request $request, Product $product)

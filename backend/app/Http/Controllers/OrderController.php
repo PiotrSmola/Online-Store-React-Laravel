@@ -74,7 +74,7 @@ class OrderController extends Controller
                 ]);
 
                 $response = [
-                    'order' => $order->load(Order::DETAILS),
+                    'order' => $order->refresh()->load(Order::DETAILS),
                     'customer' => $customer,
                     'message' => 'Zamówienie zostało złożone pomyślnie!'
                 ];
