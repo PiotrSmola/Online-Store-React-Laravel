@@ -11,8 +11,13 @@ export const PER_PAGE = 24;
 const SORTS = new Set(SORT_OPTIONS.map((option) => option.value));
 const FILTER_KEYS = ['q', 'sort', 'min_price', 'max_price', 'size', 'color'];
 
+/** Digits with up to two decimals. Rejects a lone dot and 1.5.5, which the API answers with a 422. */
+export function isValidPrice(value) {
+  return /^\d+(\.\d{1,2})?$/.test(value);
+}
+
 function priceValue(value) {
-  return value !== null && value.trim() !== '' && Number(value) >= 0 ? value.trim() : '';
+  return value !== null && isValidPrice(value.trim()) ? value.trim() : '';
 }
 
 function pageValue(value) {

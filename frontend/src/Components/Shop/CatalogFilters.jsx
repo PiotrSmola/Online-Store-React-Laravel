@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { SORT_OPTIONS, hasActiveFilters } from '../../lib/catalogQuery';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { SORT_OPTIONS, hasActiveFilters, isValidPrice } from '../../lib/catalogQuery';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
 import Select from '../ui/Select';
@@ -11,10 +12,12 @@ function withAll(label, values = []) {
   return [{ value: '', label }, ...values];
 }
 
-/** A price field that applies its value after typing stops, not on every keystroke. */
+/** A price field that applies a valid value after typing stops, not on every keystroke. */
 function PriceField({ label, value, onCommit, placeholder }) {
   const [text, setText] = useState(value);
   const [known, setKnown] = useState(value);
+  const typed = useDebouncedValue(text, PRICE_DEBOUNCE_MS);
+  const valid = text === '' || isValidPrice(text);
 
   if (known !== value) {
     setKnown(value);
@@ -22,11 +25,11 @@ function PriceField({ label, value, onCommit, placeholder }) {
   }
 
   useEffect(() => {
-    if (text === value) return undefined;
+    if (text === value || !valid) return undefined;
 
     const timer = setTimeout(() => onCommit(text), PRICE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [text, value, onCommit]);
+  }, [text, value, valid, onCommit]);
 
   return (
     <Field
@@ -35,6 +38,7 @@ function PriceField({ label, value, onCommit, placeholder }) {
       inputMode="decimal"
       placeholder={placeholder}
       value={text}
+      error={!valid && typed === text ? 'Wpisz cenę, na przykład 49.99' : null}
       onChange={(event) => setText(event.target.value.replace(/[^\d.,]/g, '').replace(',', '.'))}
     />
   );

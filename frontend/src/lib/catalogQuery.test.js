@@ -24,7 +24,7 @@ describe('readCatalogQuery', () => {
     expect(read('sort=hacked').sort).toBe('');
   });
 
-  it.each(['abc', '-5'])('drops the price %s', (price) => {
+  it.each(['abc', '-5', '.', '1.', '1.5.5', '1.555', '1e3'])('drops the price %s', (price) => {
     expect(read(`min_price=${price}`).min_price).toBe('');
   });
 
