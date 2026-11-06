@@ -88,7 +88,42 @@ class OrderEmailTest extends TestCase
 
         Mail::assertQueued(OrderStatusChanged::class, fn (OrderStatusChanged $mail) => $mail->hasTo('victim@example.com')
             && $mail->note === 'Pakujemy'
-            && $mail->order->status === 'processing');
+            && $mail->status === 'processing'
+            && $mail->statusLabel === 'W realizacji');
+    }
+
+    public function test_two_quick_changes_each_mail_their_own_status(): void
+    {
+        $order = $this->place();
+        Mail::fake();
+
+        app(OrderService::class)->changeStatus($order, 'processing');
+        app(OrderService::class)->changeStatus($order, 'shipped');
+
+        // As the worker sees them: the order comes back from the database in its final state.
+        $mails = Mail::queued(OrderStatusChanged::class)->map(fn ($mail) => unserialize(serialize($mail)))->values();
+
+        $this->assertCount(2, $mails);
+        $this->assertSame('shipped', $mails[0]->order->status);
+
+        $this->assertStringContainsString('W realizacji', $mails[0]->render());
+        $this->assertStringNotContainsString('Wysłane', $mails[0]->render());
+        $this->assertStringContainsString('W realizacji', $mails[0]->envelope()->subject);
+
+        $this->assertStringContainsString('Wysłane', $mails[1]->render());
+    }
+
+    public function test_the_payment_label_is_the_one_from_the_moment_of_the_change(): void
+    {
+        $order = $this->place();
+        Mail::fake();
+
+        app(OrderService::class)->changeStatus($order, 'processing');
+        app(OrderService::class)->markPaid($order);
+
+        $first = Mail::queued(OrderStatusChanged::class)->first();
+
+        $this->assertStringContainsString('Nieopłacone', unserialize(serialize($first))->render());
     }
 
     public function test_a_refused_status_change_sends_nothing(): void
@@ -150,7 +185,7 @@ class OrderEmailTest extends TestCase
         $order = $this->place();
         app(OrderService::class)->changeStatus($order, 'processing');
 
-        $html = (new OrderStatusChanged($order->fresh(), 'Pakujemy'))->render();
+        $html = (new OrderStatusChanged($order, 'processing', 'W realizacji', 'Nieopłacone', 'Pakujemy'))->render();
 
         $this->assertStringContainsString('W realizacji', $html);
         $this->assertStringContainsString('Pakujemy', $html);
@@ -161,7 +196,7 @@ class OrderEmailTest extends TestCase
         $order = $this->place(null, ['product' => $this->createProduct(['nazwa' => '<script>alert(1)</script>'])]);
 
         $placed = (new OrderPlaced($order))->render();
-        $status = (new OrderStatusChanged($order, '<img src=x onerror=alert(1)>'))->render();
+        $status = (new OrderStatusChanged($order, 'pending', 'Oczekuje', 'Nieopłacone', '<img src=x onerror=alert(1)>'))->render();
 
         $this->assertStringNotContainsString('<script>alert', $placed);
         $this->assertStringContainsString('&lt;script&gt;', $placed);

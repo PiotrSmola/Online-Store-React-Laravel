@@ -14,13 +14,22 @@ class OrderStatusChanged extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Order $order, public ?string $note = null)
-    {
+    /**
+     * The order is read again when the worker sends the mail, by which time it may have moved
+     * on. So the status this mail announces travels with it instead of coming from the order.
+     */
+    public function __construct(
+        public Order $order,
+        public string $status,
+        public string $statusLabel,
+        public string $paymentStatusLabel,
+        public ?string $note = null,
+    ) {
     }
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: "Zamówienie {$this->order->order_number}: {$this->order->status_label}");
+        return new Envelope(subject: "Zamówienie {$this->order->order_number}: {$this->statusLabel}");
     }
 
     public function content(): Content

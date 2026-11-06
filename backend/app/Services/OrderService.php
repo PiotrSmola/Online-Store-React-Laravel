@@ -147,7 +147,7 @@ class OrderService
             $locked->status = $status;
             $locked->save();
             $this->recordEvent($locked, $status, $note);
-            $this->queueMail($locked, new OrderStatusChanged($locked, $note));
+            $this->queueStatusMail($locked, $note);
 
             return $locked;
         }, 3);
@@ -229,11 +229,22 @@ class OrderService
 
         $order->save();
         $this->recordEvent($order, $order->status, $note);
-        $this->queueMail($order, new OrderStatusChanged($order, $note));
+        $this->queueStatusMail($order, $note);
 
         Log::info('Order paid', ['order_id' => $order->id]);
 
         return $order;
+    }
+
+    private function queueStatusMail(Order $order, ?string $note): void
+    {
+        $this->queueMail($order, new OrderStatusChanged(
+            $order,
+            $order->status,
+            $order->status_label,
+            $order->payment_status_label,
+            $note
+        ));
     }
 
     // After the commit, so a rolled back order sends nothing.
