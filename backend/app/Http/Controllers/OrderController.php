@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\PasswordAttempts;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    private const ACCOUNT_EXISTS_MESSAGE = 'Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.';
+
     public function store(Request $request)
     {
         try {
@@ -76,10 +79,16 @@ class OrderController extends Controller
                 if ($customer) {
                     $customer->update($customerData);
                 } else {
-                    $customer = Customer::create($customerData + [
-                        'email' => $request->email,
-                        'password' => Hash::make($request->password),
-                    ]);
+                    try {
+                        $customer = Customer::create($customerData + [
+                            'email' => $request->email,
+                            'password' => Hash::make($request->password),
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Another request registered the address after the lookup, or the
+                        // unique index treats it as equal to one the lookup did not match.
+                        throw ValidationException::withMessages(['email' => [self::ACCOUNT_EXISTS_MESSAGE]]);
+                    }
                 }
 
                 $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
@@ -173,9 +182,7 @@ class OrderController extends Controller
 
         if ($customer) {
             if ($request->password === null || !$this->passwordMatches($request, $customer)) {
-                throw ValidationException::withMessages([
-                    'email' => ['Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.'],
-                ]);
+                throw ValidationException::withMessages(['email' => [self::ACCOUNT_EXISTS_MESSAGE]]);
             }
 
             return $customer;

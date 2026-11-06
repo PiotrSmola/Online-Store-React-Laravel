@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -60,6 +61,14 @@ class AccentedEmailVariantsTest extends TestCase
         $this->product = $this->createProduct();
     }
 
+    // Only the index ignores accents, so the lookup misses a row the insert then collides with.
+    private function useAccentInsensitiveUniqueIndexOnly(): void
+    {
+        DB::statement('CREATE UNIQUE INDEX customers_email_unique ON customers (email COLLATE ' . self::COLLATION . ')');
+
+        $this->victim = $this->createCustomer();
+        $this->product = $this->createProduct();
+    }
 
     private function loginAs(string $email, string $password = 'wrong-password'): TestResponse
     {
@@ -188,4 +197,17 @@ class AccentedEmailVariantsTest extends TestCase
         $this->assertSame(count(self::VARIANTS), $this->victim->tokens()->count());
     }
 
+    public function test_registering_a_duplicate_the_lookup_missed_gets_a_422(): void
+    {
+        $this->useAccentInsensitiveUniqueIndexOnly();
+
+        $response = $this->orderAs('víctim@example.com', 'new-password');
+
+        $response->assertStatus(422)->assertJsonValidationErrors(['email']);
+        $response->assertJsonMissingPath('token');
+        $this->assertStringContainsString('Zaloguj się', $response->json('errors.email.0'));
+        $this->assertDatabaseCount('customers', 1);
+        $this->assertSame(0, Order::count());
+        $this->assertSame('Anna', $this->victim->fresh()->first_name);
+    }
 }
