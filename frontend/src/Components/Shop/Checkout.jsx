@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useShop } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
