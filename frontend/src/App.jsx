@@ -31,6 +31,8 @@ const NewsletterUnsubscribe = lazy(() =>
   import('./Components/Shop/NewsletterAction').then((module) => ({ default: module.NewsletterUnsubscribe })),
 );
 const NotFound = lazy(() => import('./Components/Shop/NotFound'));
+// The admin panel is one chunk, which only this route ever requests.
+const AdminApp = lazy(() => import('./Components/Admin/AdminApp'));
 
 export default function App() {
   return (
@@ -61,6 +63,7 @@ export default function App() {
                 <Route path="orders" element={<CustomerOrders />} />
                 <Route path="orders/:id" element={<OrderDetail />} />
                 <Route path="orders/:id/pay" element={<PaymentPage />} />
+                <Route path="admin/*" element={<AdminApp />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Route>
