@@ -6,6 +6,8 @@ use App\Http\Controllers\CustomerAccountController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\WishlistController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/products', [ProductController::class, 'index']);
@@ -30,6 +32,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/cart', [CartController::class, 'show']);
     Route::put('/cart', [CartController::class, 'update']);
+
+    Route::get('/wishlist', [WishlistController::class, 'index']);
+    Route::post('/wishlist/{product}', [WishlistController::class, 'store']);
+    Route::delete('/wishlist/{product}', [WishlistController::class, 'destroy']);
+
+    Route::post('/products/{product}/reviews', [ReviewController::class, 'store'])->middleware('throttle:reviews');
 
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/{order}', [OrderController::class, 'show']);

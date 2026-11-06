@@ -58,6 +58,10 @@ class AppServiceProvider extends ServiceProvider
                 ->response($tooManyAttempts));
         }
 
+        RateLimiter::for('reviews', fn (Request $request) => Limit::perMinute(10)
+            ->by((string) $request->user()?->id)
+            ->response($tooManyAttempts));
+
         // The cart asks for a quote on every change. Only requests carrying a coupon can
         // guess codes, so those have their own, tighter budget.
         RateLimiter::for('quote', function (Request $request) use ($tooManyAttempts) {

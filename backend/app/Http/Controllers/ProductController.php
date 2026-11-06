@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\Review;
 use App\Services\CatalogService;
+use App\Services\ReviewService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -11,7 +13,9 @@ class ProductController extends Controller
 {
     private const RELATED_LIMIT = 4;
 
-    public function __construct(private CatalogService $catalog)
+    private const REVIEWS_LIMIT = 20;
+
+    public function __construct(private CatalogService $catalog, private ReviewService $reviews)
     {
     }
 
@@ -32,7 +36,7 @@ class ProductController extends Controller
         return response()->json($this->catalog->search($filters));
     }
 
-    public function show(Product $product)
+    public function show(Request $request, Product $product)
     {
         abort_unless($product->is_active, 404);
 
@@ -51,7 +55,19 @@ class ProductController extends Controller
             ->limit(self::RELATED_LIMIT)
             ->get();
 
-        return response()->json($product->toArray() + ['related' => $related]);
+        $reviews = $product->reviews()
+            ->with('customer:id,first_name,last_name')
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->limit(self::REVIEWS_LIMIT)
+            ->get()
+            ->map(fn (Review $review) => $review->toPublicArray());
+
+        return response()->json($product->toArray() + [
+            'reviews' => $reviews,
+            'related' => $related,
+            'can_review' => $this->reviews->canReview($request->user('sanctum'), $product),
+        ]);
     }
 
     public function filters(Request $request)
