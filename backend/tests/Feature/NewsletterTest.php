@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Mail\NewsletterConfirmation;
 use App\Models\NewsletterSubscriber;
 use App\Support\CsvCell;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Event;
@@ -210,6 +211,82 @@ class NewsletterTest extends TestCase
 
         $this->postJson('/api/newsletter/confirm', ['token' => $token])
             ->assertStatus(422)->assertJsonValidationErrors(['token']);
+    }
+
+    public function test_a_confirmation_link_works_until_the_window_ends(): void
+    {
+        $subscriber = $this->subscriber();
+        $subscriber->save();
+
+        $this->travel(7 * 24 - 1)->hours();
+
+        $this->postJson('/api/newsletter/confirm', ['token' => $subscriber->confirm_token])->assertOk();
+    }
+
+    public function test_a_confirmation_link_expires_after_seven_days(): void
+    {
+        $subscriber = $this->subscriber();
+        $subscriber->save();
+
+        $this->travel(7 * 24 + 1)->hours();
+
+        $this->postJson('/api/newsletter/confirm', ['token' => $subscriber->confirm_token])
+            ->assertStatus(422)->assertJsonValidationErrors(['token']);
+
+        $this->assertNull($subscriber->fresh()->confirmed_at);
+    }
+
+    public function test_asking_again_gives_new_links_and_a_full_window(): void
+    {
+        Mail::fake();
+        $this->subscribe()->assertOk();
+        $old = NewsletterSubscriber::sole();
+
+        $this->travel(6)->days();
+        $this->subscribe()->assertOk();
+        $new = NewsletterSubscriber::sole();
+
+        $this->assertNotSame($old->confirm_token, $new->confirm_token);
+        $this->postJson('/api/newsletter/confirm', ['token' => $old->confirm_token])->assertStatus(422);
+
+        $this->travel(6)->days();
+        $this->postJson('/api/newsletter/confirm', ['token' => $new->confirm_token])->assertOk();
+    }
+
+    public function test_prune_deletes_only_old_unconfirmed_addresses(): void
+    {
+        $this->subscriber(['email' => 'stary@example.com'])->save();
+        $this->confirmed('potwierdzony@example.com');
+
+        $this->travel(8)->days();
+        $this->subscriber(['email' => 'nowy@example.com'])->save();
+
+        $this->artisan('newsletter:prune')->expectsOutputToContain('1')->assertSuccessful();
+
+        $this->assertEqualsCanonicalizing(
+            ['potwierdzony@example.com', 'nowy@example.com'],
+            NewsletterSubscriber::pluck('email')->all()
+        );
+    }
+
+    public function test_a_pruned_address_can_subscribe_from_scratch(): void
+    {
+        Mail::fake();
+        $this->subscribe()->assertOk();
+        $this->travel(8)->days();
+        $this->artisan('newsletter:prune')->assertSuccessful();
+        $this->assertDatabaseCount('newsletter_subscribers', 0);
+
+        $this->subscribe()->assertOk();
+
+        Mail::assertQueued(NewsletterConfirmation::class, 2);
+    }
+
+    public function test_pruning_is_scheduled(): void
+    {
+        $commands = collect(app(Schedule::class)->events())->map(fn ($event) => $event->command)->implode(' ');
+
+        $this->assertStringContainsString('newsletter:prune', $commands);
     }
 
     public function test_a_wrong_token_confirms_nothing(): void

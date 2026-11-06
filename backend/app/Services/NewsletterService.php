@@ -15,24 +15,27 @@ class NewsletterService
 
     private const TOKEN_LENGTH = 64;
 
+    /** How long a confirmation link works. Unconfirmed addresses are deleted after this too. */
+    private const CONFIRM_WITHIN_DAYS = 7;
+
     /** Returns nothing on purpose: the caller's reply cannot depend on what happened here. */
     public function subscribe(string $email): void
     {
-        $subscriber = NewsletterSubscriber::createOrFirst(
-            ['email' => Str::lower(trim($email))],
-            ['confirm_token' => Str::random(self::TOKEN_LENGTH), 'unsubscribe_token' => Str::random(self::TOKEN_LENGTH)]
-        );
+        $email = Str::lower(trim($email));
+        $subscriber = $this->findOrCreate($email);
 
         if ($subscriber->confirmed_at !== null) {
             return;
         }
 
         if (!$subscriber->wasRecentlyCreated) {
-            if ($subscriber->updated_at->gt(now()->subMinutes(self::RESEND_AFTER_MINUTES))) {
+            if ($subscriber->created_at->gt(now()->subMinutes(self::RESEND_AFTER_MINUTES))) {
                 return;
             }
 
-            $subscriber->touch();
+            // A new request starts over: new links, and a full window to use them.
+            $subscriber->delete();
+            $subscriber = $this->findOrCreate($email);
         }
 
         // To the stored address: on MySQL the lookup also matches spellings it treats as equal.
@@ -44,7 +47,9 @@ class NewsletterService
 
     public function confirm(string $token): void
     {
-        $subscriber = NewsletterSubscriber::where('confirm_token', $token)->first();
+        $subscriber = NewsletterSubscriber::where('confirm_token', $token)
+            ->where('created_at', '>=', now()->subDays(self::CONFIRM_WITHIN_DAYS))
+            ->first();
 
         if (!$subscriber) {
             throw ValidationException::withMessages(['token' => ['Link potwierdzający jest nieprawidłowy lub został już użyty.']]);
@@ -61,6 +66,23 @@ class NewsletterService
         if (!$deleted) {
             throw ValidationException::withMessages(['token' => ['Link wypisania jest nieprawidłowy lub został już użyty.']]);
         }
+    }
+
+    /** An address nobody confirmed must not stay stored: no consent was given for it. */
+    public function pruneUnconfirmed(): int
+    {
+        return NewsletterSubscriber::query()
+            ->whereNull('confirmed_at')
+            ->where('created_at', '<', now()->subDays(self::CONFIRM_WITHIN_DAYS))
+            ->delete();
+    }
+
+    private function findOrCreate(string $email): NewsletterSubscriber
+    {
+        return NewsletterSubscriber::createOrFirst(
+            ['email' => $email],
+            ['confirm_token' => Str::random(self::TOKEN_LENGTH), 'unsubscribe_token' => Str::random(self::TOKEN_LENGTH)]
+        );
     }
 
     private function link(string $action, string $token): string
