@@ -1,113 +1,108 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router";
-import { useShop } from "../../Context/useShop";
-import { API_URL } from '../../config';
+import { useState } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router';
+import { AUTH_STATUS } from '../../Context/authStatus';
+import { useAuth } from '../../Context/useShop';
+import { useForm } from '../../hooks/useForm';
+import { safeRedirect } from '../../lib/redirect';
+import { signIn } from '../../lib/session';
+import Button from '../ui/Button';
+import ErrorSummary from '../ui/ErrorSummary';
+import Field from '../ui/Field';
+import PageHeading from '../ui/PageHeading';
+
+const FIELD_IDS = { email: 'login-email', password: 'login-password' };
+const LINK = 'inline-block py-2 text-pine underline underline-offset-4';
+
+function clientErrors({ email, password }) {
+  const errors = {};
+  if (!email.trim()) errors.email = 'Wpisz adres e-mail';
+  if (!password) errors.password = 'Wpisz hasło';
+  return errors;
+}
 
 export default function CustomerLogin() {
-  const { loginCustomer } = useShop();
-  const navigate = useNavigate();
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
+  const { status, signInWith } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [values, setValues] = useState({ email: '', password: '' });
+  const form = useForm(FIELD_IDS);
+  const next = safeRedirect(searchParams.get('next'));
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  if (status === AUTH_STATUS.authenticated) return <Navigate to={next} replace />;
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setValues((current) => ({ ...current, [name]: value }));
+    form.setFieldError(name, null);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors({});
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (form.submitting) return;
 
-    try {
-      const res = await fetch(`${API_URL}/api/customer/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        loginCustomer(data.customer, data.token);
-        navigate('/');
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-        } else {
-          setErrors({ email: [data.message || 'Nieprawidłowe dane logowania'] });
-        }
-      }
-    } catch (error) {
-      console.error('Error logging in:', error);
-      setErrors({ email: ['Wystąpił błąd podczas logowania'] });
-    } finally {
-      setLoading(false);
+    const found = clientErrors(values);
+    if (Object.keys(found).length > 0) {
+      form.fail(found);
+      return;
     }
+
+    form.reset();
+    form.run(async () => {
+      const { customer, token } = await signIn(values);
+      signInWith(customer, token);
+    });
   };
 
   return (
-    <div className="w3-container w3-padding-64">
-      <div className="w3-flex" style={{ justifyContent: 'center' }}>
-        <div className="w3-col l4 m6 s12 w3-margin-auto">
-          <div className="w3-card w3-padding-large">
-            <h2 className="w3-center w3-padding-16">Logowanie</h2>
-            
-            <form onSubmit={handleSubmit}>
-              <div className="w3-margin-bottom">
-                <label className="w3-text-black"><b>Email:</b></label>
-                <input 
-                  type="email" 
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="w3-input w3-border w3-margin-top"
-                  required
-                />
-                {errors.email && <p className="w3-text-red w3-small">{errors.email[0]}</p>}
-              </div>
+    <div className="gutter py-8 lg:py-12">
+      <div className="max-w-md">
+        <PageHeading>Logowanie</PageHeading>
 
-              <div className="w3-margin-bottom">
-                <label className="w3-text-black"><b>Hasło:</b></label>
-                <input 
-                  type="password" 
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w3-input w3-border w3-margin-top"
-                  required
-                />
-                {errors.password && <p className="w3-text-red w3-small">{errors.password[0]}</p>}
-              </div>
-
-              <button 
-                type="submit" 
-                className="w3-button w3-black w3-block w3-padding-large"
-                disabled={loading}
-              >
-                {loading ? 'Logowanie...' : 'Zaloguj się'}
-              </button>
-            </form>
-
-            <div className="w3-center w3-margin-top">
-              <p>Nie masz konta? Zostanie utworzone podczas pierwszego zakupu.</p>
-              <Link to="/" className="w3-button w3-light-grey">
-                Powrót do sklepu
-              </Link>
-            </div>
+        {form.failedSubmits > 0 && form.summary.length > 0 && (
+          <div className="mt-6">
+            <ErrorSummary errors={form.summary} focusKey={form.failedSubmits} title="Nie udało się zalogować" />
           </div>
-        </div>
+        )}
+
+        <form noValidate onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <Field
+            id={FIELD_IDS.email}
+            label="E-mail"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={values.email}
+            error={form.errors.email}
+            onChange={handleChange}
+          />
+          <Field
+            id={FIELD_IDS.password}
+            label="Hasło"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={values.password}
+            error={form.errors.password}
+            onChange={handleChange}
+          />
+          <Button type="submit" block loading={form.submitting}>
+            Zaloguj się
+          </Button>
+        </form>
+
+        <ul className="mt-6">
+          <li>
+            <Link to="/forgot-password" className={LINK}>
+              Nie pamiętam hasła
+            </Link>
+          </li>
+          <li>
+            <Link to={searchParams.get('next') ? `/register?next=${encodeURIComponent(next)}` : '/register'} className={LINK}>
+              Załóż konto
+            </Link>
+          </li>
+        </ul>
       </div>
     </div>
   );

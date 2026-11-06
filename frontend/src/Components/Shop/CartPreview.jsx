@@ -1,150 +1,70 @@
-import { Link } from "react-router";
-import { useShop } from "../../Context/useShop";
 import PropTypes from 'prop-types';
-import { API_URL } from '../../config';
+import { useCartItems } from '../../Context/useShop';
+import { useCartQuote } from '../../hooks/useCartQuote';
+import { lineKey } from '../../lib/cart';
+import { countProducts, formatPrice } from '../../lib/format';
+import { ButtonLink } from '../ui/Button';
+import CartLine from './CartLine';
 
-export default function CartPreview({ isVisible, onMouseEnter, onMouseLeave }) {
-  const { cart, removeFromCart, updateCartQuantity, getCartTotal } = useShop();
+const VISIBLE_LINES = 4;
 
-  if (!isVisible) return null;
+/** The content of the header's cart panel. It prices the cart only while it is open. */
+export default function CartPreview({ onNavigate, onRemoved }) {
+  const items = useCartItems();
+  const { data: quote, error } = useCartQuote(items);
+  const hidden = items.length - VISIBLE_LINES;
+  const hasUnavailable = quote?.lines.some((line) => !line.available);
+
+  if (items.length === 0) {
+    return (
+      <>
+        <p className="font-medium">Twój koszyk jest pusty</p>
+        <ButtonLink to="/products" block className="mt-4" onClick={onNavigate}>
+          Zobacz produkty
+        </ButtonLink>
+      </>
+    );
+  }
 
   return (
-    <div 
-      className="cart-preview-dropdown"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <div className="cart-preview-header">
-        <h4 className="w3-margin-bottom">Koszyk ({cart.length})</h4>
+    <>
+      <ul className="space-y-4">
+        {items.slice(0, VISIBLE_LINES).map((item) => (
+          <CartLine
+            key={lineKey(item)}
+            item={item}
+            line={quote?.lines.find((line) => line.key === lineKey(item))}
+            compact
+            onRemoved={onRemoved}
+          />
+        ))}
+      </ul>
+
+      {hidden > 0 && <p className="mt-3 text-sm text-stone">Oraz {countProducts(hidden)} w koszyku</p>}
+      {error && <p className="mt-3 text-sm text-ember">{error.message}</p>}
+
+      <p aria-live="polite" className="mt-4 flex items-baseline justify-between gap-4">
+        <span>Wartość produktów</span>
+        <span className="font-semibold">{formatPrice(quote?.subtotal)}</span>
+      </p>
+
+      {hasUnavailable && <p className="mt-3 text-sm text-ember">Usuń niedostępne produkty, aby przejść dalej.</p>}
+
+      <div className="mt-4 grid gap-2">
+        {!hasUnavailable && (
+          <ButtonLink to="/checkout" block onClick={onNavigate}>
+            Przejdź do zamówienia
+          </ButtonLink>
+        )}
+        <ButtonLink to="/cart" variant="secondary" block onClick={onNavigate}>
+          Zobacz koszyk
+        </ButtonLink>
       </div>
-      
-      {cart.length === 0 ? (
-        <div className="cart-preview-empty">
-          <p className="w3-text-grey w3-center w3-padding">
-            <i className="fa fa-shopping-cart w3-large w3-text-grey"></i>
-            <br />
-            Koszyk jest pusty
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="cart-preview-items">
-            {cart.slice(0, 4).map((item) => (
-              <div key={item.id} className="cart-preview-item w3-row w3-margin-bottom">
-                <div className="w3-col" style={{ width: "60px" }}>
-                  <img 
-                    src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
-                    alt={item.product.nazwa}
-                    className="cart-preview-image"
-                  />
-                </div>
-                <div className="w3-col w3-padding-small" style={{ width: "calc(100% - 60px)" }}>
-                  <div className="cart-preview-item-details">
-                    <h6 className="w3-margin-bottom cart-preview-product-name">
-                      {item.product.nazwa}
-                    </h6>
-                    
-                    {(item.selectedSize || item.selectedColor) && (
-                      <p className="w3-medium w3-text-grey w3-margin-bottom">
-                        {item.selectedSize && <span>Rozmiar: {item.selectedSize}</span>}
-                        {item.selectedSize && item.selectedColor && <span> | </span>}
-                        {item.selectedColor && <span>Kolor: {item.selectedColor}</span>}
-                      </p>
-                    )}
-                    
-                    <div className="cart-preview-quantity-controls w3-row w3-margin-bottom">
-                      <div className="w3-col s6">
-                        <div className="quantity-control">
-                          <button 
-                            className="quantity-btn minus"
-                            onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                            disabled={item.quantity <= 1}
-                          >
-                            <i className="fa fa-minus"></i>
-                          </button>
-                          <span className="quantity-display">{item.quantity}</span>
-                          <button 
-                            className="quantity-btn plus"
-                            onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
-                          >
-                            <i className="fa fa-plus"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <div className="w3-col s6 w3-right-align">
-                        <button 
-                          className="remove-btn"
-                          onClick={() => removeFromCart(item.id)}
-                          title="Usuń z koszyka"
-                        >
-                          <i className="fa fa-trash w3-text-red"></i>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="cart-preview-prices w3-row">
-                      <div className="w3-col s6">
-                        <span className="w3-medium w3-text-grey">
-                          {parseFloat(item.product.cena).toFixed(2)} zł/szt
-                        </span>
-                      </div>
-                      <div className="w3-col s6 w3-right-align">
-                        <span className="w3-medium">
-                          <b>{(parseFloat(item.product.cena) * item.quantity).toFixed(2)} zł</b>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {cart.length > 4 && (
-              <div className="cart-preview-more w3-center w3-padding-small">
-                <p className="w3-small w3-text-grey">
-                  ... i {cart.length - 4} więcej produktów
-                </p>
-              </div>
-            )}
-          </div>
-          
-          <div className="cart-preview-footer">
-            <div className="cart-preview-total w3-padding w3-light-grey">
-              <div className="w3-row">
-                <div className="w3-col s6">
-                  <span><b>Razem:</b></span>
-                </div>
-                <div className="w3-col s6 w3-right-align">
-                  <span className="w3-large"><b>{getCartTotal().toFixed(2)} zł</b></span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="cart-preview-actions w3-padding">
-              <Link 
-                to="/cart" 
-                className="w3-button w3-black w3-block w3-margin-bottom"
-              >
-                <i className="fa fa-shopping-cart w3-margin-right"></i>
-                Zobacz koszyk
-              </Link>
-              <Link 
-                to="/checkout" 
-                className="w3-button w3-green w3-block"
-              >
-                <i className="fa fa-credit-card w3-margin-right"></i>
-                Zamów teraz
-              </Link>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+    </>
   );
 }
 
 CartPreview.propTypes = {
-  isVisible: PropTypes.bool.isRequired,
-  onMouseEnter: PropTypes.func.isRequired,
-  onMouseLeave: PropTypes.func.isRequired
+  onNavigate: PropTypes.func.isRequired,
+  onRemoved: PropTypes.func.isRequired,
 };

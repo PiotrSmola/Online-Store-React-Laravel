@@ -33,6 +33,7 @@ class OrderDeliveryPriceTest extends TestCase
 
         $response = $this->postJson('/api/orders', $this->orderPayload($product, [
             'delivery_method' => $method,
+            'pickup_point' => 'WAW01M',
             'delivery_price' => 0.01,
             'total_with_delivery' => 0.01,
             'cart_items' => $this->twoItemCart($product->id),
@@ -50,6 +51,7 @@ class OrderDeliveryPriceTest extends TestCase
         $product = $this->createProduct();
         $payload = $this->orderPayload($product, [
             'delivery_method' => $method,
+            'pickup_point' => 'WAW01M',
             'cart_items' => $this->twoItemCart($product->id),
         ]);
         unset($payload['delivery_price'], $payload['total_with_delivery']);

@@ -3,14 +3,63 @@
 return [
 
     /*
-    | Delivery prices in PLN, by delivery method. The prices displayed in
-    | frontend/src/Components/Shop/Checkout.jsx have to match these values.
+    | Delivery methods with their prices in PLN. The server is the only source of
+    | prices: the frontend shows what POST /api/cart/quote returns.
     */
 
-    'delivery_prices' => [
-        'courier' => 15.99,
-        'pickup_point' => 12.99,
-        'store_pickup' => 0,
+    'delivery_methods' => [
+        'courier' => ['label' => 'Kurier', 'price' => 15.99],
+        'pickup_point' => ['label' => 'Paczkomat', 'price' => 12.99],
+        'store_pickup' => ['label' => 'Odbiór w sklepie', 'price' => 0],
+    ],
+
+    // Checked against the subtotal minus the discount.
+    'free_delivery_from' => 300,
+
+    'pickup_points' => [
+        ['code' => 'WAW01M', 'address' => 'ul. Lipowa 12, 00-101 Warszawa'],
+        ['code' => 'KRK04A', 'address' => 'ul. Ogrodowa 7, 30-002 Kraków'],
+        ['code' => 'GDA02B', 'address' => 'ul. Morska 21, 80-103 Gdańsk'],
+        ['code' => 'WRO09C', 'address' => 'ul. Słoneczna 3, 50-104 Wrocław'],
+    ],
+
+    'bank_account' => '12 3456 7890 1234 5678 9012 3456',
+
+    // Fictional details printed on invoices.
+    'seller' => [
+        'name' => 'Sklep Online sp. z o.o.',
+        'address' => 'ul. Przykładowa 1, 00-001 Warszawa',
+        'nip' => '525-000-00-00',
+        'bank_account' => '12 3456 7890 1234 5678 9012 3456',
+    ],
+
+    // Percent. Prices in the shop are gross.
+    'vat_rate' => 23,
+
+    // Card and transfer orders still unpaid after this long are cancelled and their stock freed.
+    'unpaid_order_hours' => (int) env('SHOP_UNPAID_ORDER_HOURS', 48),
+
+    // Open means pending and unpaid. Each one holds stock, so neither a customer nor an
+    // address can hold more than this at a time. Counted per address too because a
+    // guest can use a new email for every order.
+    'open_orders' => [
+        'per_customer' => 5,
+        'per_ip' => 10,
+    ],
+
+    // Fictional defaults: `.example` is reserved and the number cannot be dialled. Contact
+    // form messages are sent to this email.
+    'contact' => [
+        'email' => env('SHOP_CONTACT_EMAIL', 'kontakt@sklep.example'),
+        'phone' => env('SHOP_CONTACT_PHONE', '+48 000 000 000'),
+        'address' => env('SHOP_CONTACT_ADDRESS', 'ul. Przykładowa 1, 00-001 Warszawa'),
+        'opening_hours' => env('SHOP_CONTACT_HOURS', 'pon.-pt. 9:00-17:00'),
+    ],
+
+    // Read by `php artisan shop:admin`. There is no default password on purpose.
+    'admin' => [
+        'email' => env('ADMIN_EMAIL'),
+        'password' => env('ADMIN_PASSWORD'),
     ],
 
 ];

@@ -1,105 +1,102 @@
-import { Link } from "react-router";
-import { useShop } from "../../Context/useShop";
-import { API_URL } from '../../config';
+import { useState } from 'react';
+import { useCartActions, useCartItems } from '../../Context/useShop';
+import { useToast } from '../../Context/useToast';
+import { useCartQuote } from '../../hooks/useCartQuote';
+import { useFocusPageHeading } from '../../hooks/useFocusPageHeading';
+import { lineKey } from '../../lib/cart';
+import { formatPrice } from '../../lib/format';
+import { freeDeliveryText } from '../../lib/quote';
+import Button, { ButtonLink } from '../ui/Button';
+import ConfirmDialog from '../ui/ConfirmDialog';
+import EmptyState from '../ui/EmptyState';
+import PageHeading from '../ui/PageHeading';
+import CartLine from './CartLine';
 
 export default function Cart() {
-  const { cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart } = useShop();
+  const items = useCartItems();
+  const { clear } = useCartActions();
+  const toast = useToast();
+  const { data: quote, error, reload } = useCartQuote(items);
+  const focusHeading = useFocusPageHeading();
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
-  if (cart.length === 0) {
+  const handleClear = () => {
+    setConfirmingClear(false);
+    clear();
+    toast.success('Koszyk został wyczyszczony');
+    focusHeading();
+  };
+
+  if (items.length === 0) {
     return (
-      <div className="w3-container w3-center w3-padding-64">
-        <h2>Twój koszyk jest pusty</h2>
-        <p>
-          <Link to="/" className="w3-button w3-black w3-padding-large">
-            Kontynuuj zakupy
-          </Link>
-        </p>
+      <div className="gutter">
+        <EmptyState
+          isPage
+          title="Twój koszyk jest pusty"
+          action={<ButtonLink to="/products">Zobacz produkty</ButtonLink>}
+        />
       </div>
     );
   }
 
-  return (
-    <div className="w3-container w3-padding-32">
-      <h1>Koszyk</h1>
-      
-      <div className="w3-responsive">
-        <table className="w3-table w3-striped w3-border">
-          <thead>
-            <tr className="w3-light-grey">
-              <th>Produkt</th>
-              <th>Rozmiar</th>
-              <th>Kolor</th>
-              <th>Cena</th>
-              <th>Ilość</th>
-              <th>Suma</th>
-              <th>Akcje</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cart.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <div className="w3-row">
-                    <div className="w3-col" style={{ width: "110px" }}>
-                      <img 
-                        src={item.product.images?.[0] ? `${API_URL}/storage/products/${item.product.images[0].image_path}` : `${API_URL}/storage/products/default-product.jpg`}
-                        alt={item.product.nazwa}
-                        className="cart-thumbnail"
-                      />
-                    </div>
-                    <div className="w3-col s6">
-                      <Link to={`/product/${item.product.id}`} className="product-link">
-                        {item.product.nazwa}
-                      </Link>
-                    </div>
-                  </div>
-                </td>
-                <td>{item.selectedSize || '-'}</td>
-                <td>{item.selectedColor || '-'}</td>
-                <td>{parseFloat(item.product.cena).toFixed(2)} zł</td>
-                <td>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    value={item.quantity}
-                    onChange={(e) => updateCartQuantity(item.id, parseInt(e.target.value) || 1)}
-                    className="w3-input w3-border"
-                    style={{ width: "60px" }}
-                  />
-                </td>
-                <td>{(parseFloat(item.product.cena) * item.quantity).toFixed(2)} zł</td>
-                <td>
-                  <button 
-                    className="w3-button w3-red w3-small"
-                    onClick={() => removeFromCart(item.id)}
-                  >
-                    <i className="fa fa-trash"></i>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  const hasUnavailable = quote?.lines.some((line) => !line.available);
 
-      <div className="w3-row w3-margin-top">
-        <div className="w3-col s6">
-          <button 
-            className="w3-button w3-light-grey"
-            onClick={clearCart}
-          >
+  return (
+    <div className="gutter py-8 lg:py-12">
+      <PageHeading>Koszyk</PageHeading>
+
+      <div className="mt-8 grid gap-12 lg:grid-cols-[1fr_24rem]">
+        <div>
+          <ul className="space-y-8">
+            {items.map((item) => (
+              <CartLine
+                key={lineKey(item)}
+                item={item}
+                line={quote?.lines.find((line) => line.key === lineKey(item))}
+                onRemoved={focusHeading}
+              />
+            ))}
+          </ul>
+          <Button variant="plain" className="mt-8" onClick={() => setConfirmingClear(true)}>
             Wyczyść koszyk
-          </button>
+          </Button>
+          <ConfirmDialog
+            open={confirmingClear}
+            title="Wyczyścić koszyk?"
+            text="Usuniemy z niego wszystkie produkty."
+            confirmLabel="Wyczyść koszyk"
+            onConfirm={handleClear}
+            onCancel={() => setConfirmingClear(false)}
+          />
         </div>
-        <div className="w3-col s6 w3-right-align">
-          <h3>Suma: {getCartTotal().toFixed(2)} zł</h3>
-          <Link 
-            to="/checkout" 
-            className="w3-button w3-green w3-padding-large"
-          >
-            Przejdź do zamówienia
-          </Link>
-        </div>
+
+        <section aria-labelledby="cart-summary" className="rounded-control bg-mist p-6 lg:sticky lg:top-8 lg:self-start">
+          <h2 id="cart-summary" className="text-2xl">
+            Podsumowanie
+          </h2>
+
+          {error ? (
+            <div className="mt-4">
+              <p className="text-ember">{error.message}</p>
+              <Button variant="secondary" className="mt-4" onClick={reload}>
+                Spróbuj ponownie
+              </Button>
+            </div>
+          ) : (
+            <p aria-live="polite" className="mt-4 flex items-baseline justify-between gap-4">
+              <span>Wartość produktów</span>
+              <span className="text-xl font-semibold">{formatPrice(quote?.subtotal)}</span>
+            </p>
+          )}
+          <p className="mt-1 min-h-5 text-sm text-stone">{error ? '' : freeDeliveryText(quote)}</p>
+          {hasUnavailable && <p className="mt-4 text-ember">Usuń niedostępne produkty, aby przejść dalej.</p>}
+
+          {!hasUnavailable && (
+            <ButtonLink to="/checkout" block className="mt-6">
+              Przejdź do zamówienia
+            </ButtonLink>
+          )}
+        </section>
       </div>
     </div>
   );

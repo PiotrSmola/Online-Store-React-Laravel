@@ -7,7 +7,7 @@
     - checks that Docker / Docker Compose are available,
     - picks free host ports (if a preferred port is taken, the next free one is used;
       nothing that is already running gets stopped - except this project's own containers),
-    - generates the root .env file (APP_KEY, DB passwords) on first run and reuses it later,
+    - generates the root .env file (APP_KEY, DB and admin passwords) on first run and reuses it later,
     - builds the images, starts the stack and waits until the shop responds.
 
     Re-run the script at any time to rebuild/redeploy.
@@ -23,6 +23,7 @@ param(
     [int]$AppPort = 8080,
     [int]$BackendPort = 8000,
     [int]$DbPort = 3306,
+    [int]$MailpitPort = 8025,
     [switch]$NoBuild
 )
 
@@ -72,7 +73,7 @@ function Find-FreePort([int]$Preferred, [int[]]$Exclude = @()) {
 function Read-EnvFile([string]$Path) {
     $values = @{}
     if (Test-Path -LiteralPath $Path) {
-        foreach ($line in Get-Content -LiteralPath $Path) {
+        foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
             if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
                 $values[$Matches[1]] = $Matches[2].Trim().Trim('"')
             }
@@ -134,17 +135,27 @@ if ($dbVolumeExists -and -not $existing.ContainsKey('DB_PASSWORD')) {
 $dockerSubnet = Get-Setting 'DOCKER_SUBNET' { $defaults['DOCKER_SUBNET'] }
 $frontendIp = Get-Setting 'FRONTEND_IP' { $defaults['FRONTEND_IP'] }
 $appDebug = Get-Setting 'APP_DEBUG' { $defaults['APP_DEBUG'] }
+$mailFromAddress = Get-Setting 'MAIL_FROM_ADDRESS' { $defaults['MAIL_FROM_ADDRESS'] }
+$adminEmail = Get-Setting 'ADMIN_EMAIL' { $defaults['ADMIN_EMAIL'] }
+$adminPassword = Get-Setting 'ADMIN_PASSWORD' { New-RandomString 20 }
+$unpaidOrderHours = Get-Setting 'SHOP_UNPAID_ORDER_HOURS' { $defaults['SHOP_UNPAID_ORDER_HOURS'] }
+$shopContactEmail = Get-Setting 'SHOP_CONTACT_EMAIL' { $defaults['SHOP_CONTACT_EMAIL'] }
+$shopContactPhone = Get-Setting 'SHOP_CONTACT_PHONE' { $defaults['SHOP_CONTACT_PHONE'] }
+$shopContactAddress = Get-Setting 'SHOP_CONTACT_ADDRESS' { $defaults['SHOP_CONTACT_ADDRESS'] }
+$shopContactHours = Get-Setting 'SHOP_CONTACT_HOURS' { $defaults['SHOP_CONTACT_HOURS'] }
 
 # --- 4. Free ports ----------------------------------------------------------
 Write-Step 'Looking for free ports...'
 $appPortFree = Find-FreePort $AppPort
 $backendPortFree = Find-FreePort $BackendPort @($appPortFree)
 $dbPortFree = Find-FreePort $DbPort @($appPortFree, $backendPortFree)
+$mailpitPortFree = Find-FreePort $MailpitPort @($appPortFree, $backendPortFree, $dbPortFree)
 
 foreach ($p in @(
         @{ Name = 'Shop (frontend)'; Wanted = $AppPort; Got = $appPortFree },
         @{ Name = 'API (backend)'; Wanted = $BackendPort; Got = $backendPortFree },
-        @{ Name = 'MySQL'; Wanted = $DbPort; Got = $dbPortFree })) {
+        @{ Name = 'MySQL'; Wanted = $DbPort; Got = $dbPortFree },
+        @{ Name = 'Mailpit'; Wanted = $MailpitPort; Got = $mailpitPortFree })) {
     if ($p.Wanted -ne $p.Got) {
         Write-Host ("    {0}: port {1} is busy -> using {2}" -f $p.Name, $p.Wanted, $p.Got) -ForegroundColor Yellow
     } else {
@@ -158,6 +169,7 @@ $envContent = @"
 APP_PORT=$appPortFree
 BACKEND_PORT=$backendPortFree
 DB_FORWARD_PORT=$dbPortFree
+MAILPIT_PORT=$mailpitPortFree
 
 DOCKER_SUBNET=$dockerSubnet
 FRONTEND_IP=$frontendIp
@@ -169,6 +181,17 @@ DB_DATABASE=$dbName
 DB_USERNAME=$dbUser
 DB_PASSWORD=$dbPassword
 DB_ROOT_PASSWORD=$dbRootPassword
+
+MAIL_FROM_ADDRESS=$mailFromAddress
+ADMIN_EMAIL=$adminEmail
+ADMIN_PASSWORD=$adminPassword
+
+SHOP_UNPAID_ORDER_HOURS=$unpaidOrderHours
+
+SHOP_CONTACT_EMAIL=$shopContactEmail
+SHOP_CONTACT_PHONE=$shopContactPhone
+SHOP_CONTACT_ADDRESS=$shopContactAddress
+SHOP_CONTACT_HOURS=$shopContactHours
 "@
 [System.IO.File]::WriteAllText($EnvFile, ($envContent -replace "`r`n", "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
 Write-Step 'Saved configuration to .env'
@@ -207,6 +230,8 @@ Write-Host 'Online Store is up and running!' -ForegroundColor Green
 Write-Host "  Shop:   $shopUrl"
 Write-Host "  API:    http://127.0.0.1:$backendPortFree/api/products"
 Write-Host "  MySQL:  127.0.0.1:$dbPortFree  (db: $dbName, user: $dbUser, password in .env)"
+Write-Host "  Mailpit: http://127.0.0.1:$mailpitPortFree"
+Write-Host "  Admin:  $adminEmail / $adminPassword"
 Write-Host ''
 Write-Host 'Useful commands:'
 Write-Host '  docker compose logs -f      # follow logs'

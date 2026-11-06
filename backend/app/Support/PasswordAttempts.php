@@ -16,14 +16,15 @@ class PasswordAttempts
     private const DECAY_SECONDS = 60;
 
     /**
-     * Checks the request's password against a customer the caller has already looked up.
+     * Checks a password against a customer the caller has already looked up: the request's
+     * `password` field unless the caller passes the value from another field.
      *
      * The email limiters key on the text of the address, but the database collation matches
      * several spellings (víctim@, victim@) to one account. This budget keys on the account.
      *
      * @throws HttpResponseException with a 429 once the budget is used, before any hash check
      */
-    public static function verify(Request $request, Customer $customer): bool
+    public static function verify(Request $request, Customer $customer, ?string $password = null): bool
     {
         $key = 'customer-password:' . $customer->id . '|' . $request->ip();
 
@@ -36,7 +37,7 @@ class PasswordAttempts
         // Counted before the slow hash, so parallel requests cannot all pass the check above.
         RateLimiter::hit($key, self::DECAY_SECONDS);
 
-        if (Hash::check($request->password, $customer->password)) {
+        if (Hash::check($password ?? $request->password, $customer->password)) {
             RateLimiter::decrement($key, self::DECAY_SECONDS);
 
             return true;

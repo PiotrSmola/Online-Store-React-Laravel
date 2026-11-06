@@ -2,75 +2,198 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Coupon;
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\Review;
+use App\Services\ReviewService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class SeedShopData extends Command
 {
     protected $signature = 'shop:seed
-                            {--if-empty : Pomiń seedowanie, jeśli w bazie są już produkty}
+                            {--if-empty : Uzupełnij tylko to, czego w bazie jeszcze nie ma}
                             {--local : Użyj tylko lokalnego pliku z danymi (bez zapytania do API)}';
 
     protected $description = 'Seed shop data from external API (falls back to database/data/products.json)';
 
     private const API_URL = 'https://run.mocky.io/v3/d175ce87-f8d2-4df3-84e8-c1342af1bf54';
 
-    public function handle()
+    /** Walked by product and variant position, so every run gives the same stock. */
+    private const STOCK_PATTERN = [12, 8, 0, 15, 5, 2, 20, 9, 1, 6, 14, 0, 7, 11, 2, 18];
+
+    private const DEMO_CUSTOMERS = [
+        ['Anna', 'Kowalska'],
+        ['Piotr', 'Nowak'],
+        ['Maria', 'Wiśniewska'],
+        ['Tomasz', 'Wójcik'],
+        ['Katarzyna', 'Lewandowska'],
+        ['Michał', 'Zieliński'],
+    ];
+
+    private const REVIEW_COMMENTS = [
+        'Bardzo dobra jakość, polecam.',
+        'Zgodne z opisem, szybka dostawa.',
+        'Świetnie wygląda i dobrze leży.',
+        'Solidne wykonanie, warte swojej ceny.',
+        'Udany zakup, wszystko w porządku.',
+        'Dobry produkt, choć dostawa trwała dłużej.',
+        'Drugi zakup i nadal polecam.',
+        'Materiał przyjemny w dotyku.',
+    ];
+
+    /**
+     * With --if-empty, which the container runs on every start, each group is filled only
+     * while it is empty, so a coupon or review an admin deleted does not come back. A plain
+     * run fills in whatever single coupon, customer or review is missing, and imports products.
+     */
+    public function handle(ReviewService $reviews)
     {
-        if ($this->option('if-empty') && Product::exists()) {
-            $this->info('Produkty już istnieją w bazie - pomijam seedowanie.');
-            return 0;
-        }
+        $fillOnly = $this->option('if-empty');
 
         try {
-            $products = $this->loadProducts();
-
-            if ($products === null) {
-                $this->error('Nie udało się pobrać danych produktów (ani z API, ani z pliku lokalnego).');
+            if ($fillOnly && Product::exists()) {
+                $this->info('Produkty już istnieją w bazie - pomijam import produktów.');
+            } elseif (!$this->importProducts()) {
                 return 1;
             }
 
-            $this->info('Znaleziono ' . count($products) . ' produktów');
-
-            if (!Storage::disk('public')->exists('products')) {
-                Storage::disk('public')->makeDirectory('products');
+            if (!$fillOnly || !Coupon::exists()) {
+                $this->seedCoupons();
             }
 
-            foreach ($products as $index => $productData) {
-                $this->info('Przetwarzanie produktu: ' . $productData['nazwa']);
+            $customers = $this->seedCustomers();
 
-                $product = Product::create([
-                    'nazwa' => $productData['nazwa'],
-                    'kategoria' => $productData['kategoria'],
-                    'cena' => $productData['cena'],
-                    'opis' => $productData['opis'],
-                    'ocena' => $productData['ocena'],
-                    'rozmiar' => $productData['rozmiar'],
-                    'kolor' => $productData['kolor'],
-                ]);
-
-                $imageName = 'zdj' . ($index + 1) . '.jpg';
-
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'image_path' => $imageName,
-                    'order' => 0,
-                ]);
-
-                $this->line('✓ Utworzono produkt: ' . $product->nazwa);
+            if (!$fillOnly || !Review::exists()) {
+                $this->seedMissingReviews($customers, $reviews);
             }
-
-            $this->info('');
-            $this->info('Pomyślnie zaimportowano ' . count($products) . ' produktów!');
 
             return 0;
         } catch (\Exception $e) {
             $this->error('Błąd podczas importowania danych: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    private function importProducts(): bool
+    {
+        $products = $this->loadProducts();
+
+        if ($products === null) {
+            $this->error('Nie udało się pobrać danych produktów (ani z API, ani z pliku lokalnego).');
+            return false;
+        }
+
+        $this->info('Znaleziono ' . count($products) . ' produktów');
+
+        if (!Storage::disk('public')->exists('products')) {
+            Storage::disk('public')->makeDirectory('products');
+        }
+
+        foreach ($products as $index => $productData) {
+            $this->info('Przetwarzanie produktu: ' . $productData['nazwa']);
+
+            $product = Product::create([
+                'nazwa' => $productData['nazwa'],
+                'kategoria' => $productData['kategoria'],
+                'cena' => $productData['cena'],
+                'sale_price' => $this->salePrice((float) $productData['cena'], $index),
+                'opis' => $productData['opis'],
+                'ocena' => $productData['ocena'],
+                'rozmiar' => $productData['rozmiar'],
+                'kolor' => $productData['kolor'],
+                // Every fifth product, by position, so every run marks the same ones.
+                'is_new' => $index % 5 === 1,
+            ]);
+
+            $imageName = 'zdj' . ($index + 1) . '.jpg';
+
+            ProductImage::create([
+                'product_id' => $product->id,
+                'image_path' => $imageName,
+                'order' => 0,
+            ]);
+
+            $this->seedVariants($product, $index);
+
+            $this->line('✓ Utworzono produkt: ' . $product->nazwa);
+        }
+
+        $this->info('');
+        $this->info('Pomyślnie zaimportowano ' . count($products) . ' produktów!');
+
+        return true;
+    }
+
+    /** Products that already have reviews keep them; their position still counts. */
+    private function seedMissingReviews(array $customers, ReviewService $reviews): void
+    {
+        $position = 0;
+
+        Product::query()->lazyById()->each(function (Product $product) use (&$position, $customers, $reviews) {
+            $index = $position++;
+
+            if (!Review::query()->where('product_id', $product->id)->exists()) {
+                $this->seedReviews($product, $index, $customers);
+                $reviews->recalculate($product);
+            }
+        });
+    }
+
+    /** Every fourth product is 20% off, chosen by position so every run marks the same ones. */
+    private function salePrice(float $price, int $productIndex): ?float
+    {
+        return $productIndex % 4 === 2 ? round($price * 0.8, 2) : null;
+    }
+
+    private function seedVariants(Product $product, int $productIndex): void
+    {
+        foreach ($product->optionCombinations() as $variantIndex => $combination) {
+            $position = ($productIndex * 3 + $variantIndex) % count(self::STOCK_PATTERN);
+
+            $product->variants()->forceCreate($combination + ['stock' => self::STOCK_PATTERN[$position]]);
+        }
+    }
+
+    /** One to three reviews, chosen by position so every run writes the same ones. */
+    private function seedReviews(Product $product, int $productIndex, array $customers): void
+    {
+        $count = $productIndex % 3 + 1;
+
+        for ($i = 0; $i < $count; $i++) {
+            Review::create([
+                'product_id' => $product->id,
+                'customer_id' => $customers[($productIndex + $i) % count($customers)]->id,
+                'rating' => max(1, min(5, (int) round((float) $product->ocena) - ($productIndex + $i) % 2)),
+                'comment' => self::REVIEW_COMMENTS[($productIndex * 2 + $i) % count(self::REVIEW_COMMENTS)],
+            ]);
+        }
+    }
+
+    private function seedCoupons(): void
+    {
+        Coupon::firstOrCreate(['code' => 'WITAJ10'], ['type' => 'percent', 'value' => 10]);
+        Coupon::firstOrCreate(['code' => 'MINUS20'], ['type' => 'fixed', 'value' => 20, 'min_order' => 150]);
+    }
+
+    /** @return list<Customer> */
+    private function seedCustomers(): array
+    {
+        $customers = [];
+
+        foreach (self::DEMO_CUSTOMERS as $index => [$firstName, $lastName]) {
+            // Nobody signs in to these accounts, so the password is random and never shown.
+            $customers[] = Customer::firstOrCreate(
+                ['email' => 'demo' . ($index + 1) . '@example.com'],
+                ['password' => Str::password(32), 'first_name' => $firstName, 'last_name' => $lastName]
+            );
+        }
+
+        return $customers;
     }
 
     private function loadProducts(): ?array
