@@ -114,6 +114,9 @@ export async function download(path, options = {}) {
   return { blob: await response.blob(), name: fileName(response) };
 }
 
+// The browser reads the object URL after click() returns, and some need a moment to start.
+const REVOKE_DELAY_MS = 1000;
+
 /** Hands a blob to the browser as a download and frees its object URL afterwards. */
 export function saveFile({ blob, name }) {
   const url = URL.createObjectURL(blob);
@@ -121,5 +124,5 @@ export function saveFile({ blob, name }) {
   link.href = url;
   link.download = name;
   link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }

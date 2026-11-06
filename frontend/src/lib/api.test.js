@@ -118,8 +118,11 @@ describe('uploads and downloads', () => {
     vi.stubGlobal('document', { createElement: () => ({ click: vi.fn() }) });
 
     saveFile({ blob: new Blob(['x']), name: 'a.pdf' });
-    vi.runAllTimers();
 
+    vi.advanceTimersByTime(999);
+    expect(revoke).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
     expect(revoke).toHaveBeenCalledWith('blob:1');
     vi.useRealTimers();
   });
