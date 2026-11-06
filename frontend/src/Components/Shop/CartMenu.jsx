@@ -74,7 +74,7 @@ export default function CartMenu() {
   return (
     <div
       ref={wrapper}
-      className="flex items-center"
+      className="flex items-center gap-1"
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onBlur={handleBlur}

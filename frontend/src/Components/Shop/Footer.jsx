@@ -11,20 +11,22 @@ export default function Footer({ categories }) {
       <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
         <p className="text-3xl font-bold font-stretch-condensed">Sklep</p>
 
-        <section aria-labelledby="footer-categories">
-          <h2 id="footer-categories" className="mb-2 text-xl">
-            Kategorie
-          </h2>
-          <ul>
-            {categories.map((category) => (
-              <li key={category}>
-                <Link to={categoryPath(category)} className={LINK}>
-                  {category}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {categories.length > 0 && (
+          <section aria-labelledby="footer-categories">
+            <h2 id="footer-categories" className="mb-2 text-xl">
+              Kategorie
+            </h2>
+            <ul>
+              {categories.map((category) => (
+                <li key={category}>
+                  <Link to={categoryPath(category)} className={LINK}>
+                    {category}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section aria-labelledby="footer-shopping">
           <h2 id="footer-shopping" className="mb-2 text-xl">
