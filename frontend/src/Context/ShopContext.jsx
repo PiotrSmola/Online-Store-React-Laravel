@@ -133,8 +133,11 @@ export default function ShopProvider({ children }) {
     return cart.reduce((total, item) => total + item.quantity, 0);
   };
 
+  // Same rule as the backend: blank stored options do not count as options.
   const productHasOptions = (product) =>
-    product.rozmiar?.length > 0 || product.kolor?.length > 0;
+    [product.rozmiar, product.kolor].some((options) =>
+      [].concat(options ?? []).some((option) => String(option ?? '').trim() !== '')
+    );
 
   const loginCustomer = (customerData, token) => {
     setCustomer(customerData);

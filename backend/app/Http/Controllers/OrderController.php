@@ -254,7 +254,10 @@ class OrderController extends Controller
     // $offered is the product's JSON column, which can be null or an empty list.
     private function optionError(Product $product, string $label, mixed $offered, ?string $selected): ?string
     {
-        $options = array_map('strval', array_filter((array) $offered, fn ($option) => !blank($option)));
+        $options = array_filter(
+            array_map(fn ($option) => trim((string) $option), (array) $offered),
+            fn ($option) => $option !== ''
+        );
 
         if ($options === []) {
             return blank($selected) ? null : "Produkt „{$product->nazwa}” nie ma opcji: {$label}";

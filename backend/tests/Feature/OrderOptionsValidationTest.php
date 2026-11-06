@@ -125,6 +125,33 @@ class OrderOptionsValidationTest extends TestCase
         $this->assertSame('Czarny', OrderItem::sole()->selected_color);
     }
 
+    public function test_stored_options_are_trimmed_before_comparing(): void
+    {
+        $product = $this->createProduct(['rozmiar' => [' S ', 'M '], 'kolor' => ["Czarny\n"]]);
+
+        // ProductDetail sends the stored value as it is; the request pipeline trims it.
+        $this->orderWithOptions($product, ' S ', "Czarny\n")->assertOk();
+
+        $this->assertSame('S', OrderItem::sole()->selected_size);
+        $this->assertSame('Czarny', OrderItem::sole()->selected_color);
+    }
+
+    public function test_stored_blank_options_count_as_no_options(): void
+    {
+        $product = $this->createProduct(['rozmiar' => ['', '   '], 'kolor' => [null, ' ']]);
+
+        $this->orderWithOptions($product, null, null)->assertOk();
+
+        $this->assertDatabaseCount('orders', 1);
+    }
+
+    public function test_value_on_a_product_with_only_blank_options_is_rejected(): void
+    {
+        $product = $this->createProduct(['rozmiar' => ['', '   ']]);
+
+        $this->assertRejected($this->orderWithOptions($product, 'M', 'Czarny'), 'selected_size');
+    }
+
     public function test_error_names_the_offending_cart_line(): void
     {
         $valid = $this->createProduct();
