@@ -70,6 +70,94 @@ class InvoiceTest extends TestCase
         $this->assertStringContainsString('DejaVuSans', $pdf);
     }
 
+    public function test_numbers_keep_counting_past_9999_in_a_month(): void
+    {
+        $this->travelTo('2026-03-15 12:00:00');
+        $customer = $this->createCustomer();
+        $service = app(InvoiceService::class);
+
+        // In text order FV/2026/03/9999 sorts after FV/2026/03/10000.
+        foreach ([9999, 10000] as $sequence) {
+            $order = $this->paidOrder($customer);
+            DB::table('orders')->where('id', $order->id)->update([
+                'invoice_number' => "FV/2026/03/{$sequence}",
+                'invoice_sequence' => $sequence,
+            ]);
+        }
+
+        $this->assertSame('FV/2026/03/10001', $service->ensureNumber($this->paidOrder($customer)));
+    }
+
+    public function test_a_refunded_order_keeps_access_to_its_issued_invoice(): void
+    {
+        $customer = $this->createCustomer();
+        $order = $this->paidOrder($customer);
+        $number = app(InvoiceService::class)->ensureNumber($order);
+        app(OrderService::class)->changeStatus($order, 'cancelled');
+        $this->assertSame('refunded', $order->fresh()->payment_status);
+
+        $response = $this->actingAs($customer, 'sanctum')->get("/api/orders/{$order->id}/invoice")->assertOk();
+
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+        $this->assertSame($number, $order->fresh()->invoice_number);
+    }
+
+    public function test_a_refunded_order_without_an_invoice_does_not_get_one(): void
+    {
+        $customer = $this->createCustomer();
+        $order = $this->paidOrder($customer);
+        app(OrderService::class)->changeStatus($order, 'cancelled');
+
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$order->id}/invoice")->assertStatus(409);
+
+        $this->assertNull($order->fresh()->invoice_number);
+    }
+
+    public function test_the_invoice_says_when_the_payment_was_refunded(): void
+    {
+        $order = $this->paidOrder();
+        app(OrderService::class)->changeStatus($order, 'cancelled');
+        $order = $order->fresh();
+
+        $data = ['number' => 'FV/1', 'order' => $order, 'seller' => config('shop.seller'), 'vatRate' => 23, 'rows' => [], 'totals' => ['net' => 0, 'vat' => 0, 'gross' => 0]];
+
+        $this->assertStringContainsString('płatność została zwrócona', view('invoices.order', $data)->render());
+    }
+
+    public function test_a_renamed_product_does_not_change_what_was_invoiced(): void
+    {
+        $product = $this->createProduct(['nazwa' => 'Nazwa z dnia zakupu']);
+        $order = $this->paidOrder(null, ['product' => $product]);
+
+        $product->update(['nazwa' => 'Nowa nazwa']);
+
+        $rows = app(InvoiceService::class)->amounts($order->fresh())['rows'];
+
+        $this->assertStringContainsString('Nazwa z dnia zakupu', $rows[0]['name']);
+    }
+
+    public function test_order_history_keeps_the_name_from_the_purchase(): void
+    {
+        $customer = $this->createCustomer();
+        $product = $this->createProduct(['nazwa' => 'Nazwa z dnia zakupu']);
+        $order = $this->paidOrder($customer, ['product' => $product]);
+        $product->update(['nazwa' => 'Nowa nazwa']);
+
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$order->id}")
+            ->assertJsonPath('items.0.product_name', 'Nazwa z dnia zakupu')
+            ->assertJsonPath('items.0.product.nazwa', 'Nowa nazwa');
+    }
+
+    public function test_the_sequence_stays_out_of_the_api(): void
+    {
+        $customer = $this->createCustomer();
+        $order = $this->paidOrder($customer);
+        app(InvoiceService::class)->ensureNumber($order);
+
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$order->id}")
+            ->assertJsonMissingPath('invoice_sequence');
+    }
+
     public function test_a_foreign_invoice_cannot_be_downloaded(): void
     {
         $order = $this->paidOrder($this->createCustomer());

@@ -24,6 +24,9 @@
         Data wystawienia: {{ $order->paid_at?->format('d.m.Y') }}<br>
         Zamówienie: {{ $order->order_number }} z dnia {{ $order->order_date?->format('d.m.Y') }}<br>
         Płatność: {{ $order->payment_method_label }}
+        @if ($order->payment_status === 'refunded')
+            <br><strong>Zamówienie anulowane, płatność została zwrócona.</strong>
+        @endif
     </div>
 
     <table class="parties">

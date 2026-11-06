@@ -90,6 +90,7 @@ class OrderService
             foreach ($quote['lines'] as $line) {
                 $order->items()->create([
                     'product_id' => $line['product']->id,
+                    'product_name' => $line['product']->nazwa,
                     'quantity' => $line['quantity'],
                     'price' => $line['unit_price'],
                     'selected_size' => $line['size'] === '' ? null : $line['size'],

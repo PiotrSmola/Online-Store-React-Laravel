@@ -55,6 +55,10 @@ class Order extends Model
         'order_date',
     ];
 
+    protected $hidden = [
+        'invoice_sequence',
+    ];
+
     protected $casts = [
         'billing_address' => 'array',
         'shipping_address' => 'array',

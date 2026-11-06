@@ -11,7 +11,7 @@
         @foreach ($order->items as $item)
             <tr>
                 <td style="padding: 6px 0; border-bottom: 1px solid #e7e5e4;">
-                    {{ $item->product?->nazwa }}
+                    {{ $item->product_name }}
                     @if ($item->selected_size || $item->selected_color)
                         <br><span style="color: #78716c;">{{ collect([$item->selected_size, $item->selected_color])->filter()->join(', ') }}</span>
                     @endif

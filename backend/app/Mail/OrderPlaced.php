@@ -25,7 +25,7 @@ class OrderPlaced extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        $this->order->loadMissing('items.product:id,nazwa');
+        $this->order->loadMissing('items');
 
         return new Content(view: 'emails.order-placed');
     }
