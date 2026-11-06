@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
@@ -34,9 +35,7 @@ class OrderController extends Controller
                 'company_name' => 'nullable|string|max:255',
                 'nip' => 'nullable|string|max:20',
                 'payment_method' => 'required|in:card,transfer,cash',
-                'delivery_method' => 'required|in:courier,pickup_point,store_pickup',
-                'delivery_price' => 'required|numeric|min:0',
-                'total_with_delivery' => 'required|numeric|min:0',
+                'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_prices')))],
                 'cart_items' => 'required|array|min:1',
                 'cart_items.*.product_id' => 'required|exists:products,id',
                 'cart_items.*.quantity' => 'required|integer|min:1',
@@ -104,7 +103,8 @@ class OrderController extends Controller
                     ];
                 }
 
-                $totalAmount += $request->delivery_price;
+                $deliveryPrice = config('shop.delivery_prices')[$request->delivery_method];
+                $totalAmount = round($totalAmount + $deliveryPrice, 2);
 
                 Log::info('Obliczono pozycje zamówienia:', $orderItems);
 
@@ -128,7 +128,7 @@ class OrderController extends Controller
                     'status' => 'pending',
                     'payment_method' => $request->payment_method,
                     'delivery_method' => $request->delivery_method,
-                    'delivery_price' => $request->delivery_price,
+                    'delivery_price' => $deliveryPrice,
                     'billing_address' => [
                         'first_name' => $request->first_name,
                         'last_name' => $request->last_name,
