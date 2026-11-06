@@ -1,17 +1,19 @@
 # Online-Store-React-Laravel
 
-A full-stack e-commerce application built with **Laravel** (backend API) and **React** (frontend) featuring a searchable catalog with stock per variant, saved carts, coupons, simulated card payments, PDF invoices, email notifications and an admin API.
+A full-stack e-commerce application built with **Laravel** (backend API) and **React** (frontend) featuring a searchable catalog with stock per variant, sale prices, saved carts, coupons, simulated card payments, PDF invoices, email notifications, a double opt-in newsletter, a contact form and an admin API.
 
 ## 🚀 Features
 
 ### Backend (Laravel API)
-- **Catalog**: Search, filters, sorting and pagination, with stock kept per size and color variant
+- **Catalog**: Search, filters, sorting and pagination, with stock kept per size and color variant, sale prices and new product flags
 - **Cart and pricing**: Saved carts, coupons, free delivery threshold; the server is the only source of prices
 - **Orders**: Locked stock handling, a status flow with history, cancellation that returns stock
 - **Simulated payment**: Card flow with test cards, no card data on the server
 - **Customer accounts**: Registration, login, password reset, profile, wishlist and verified buyer reviews, using Laravel Sanctum
-- **Admin API**: Dashboard numbers, products with variants and photos, orders, customers, coupons, review moderation
-- **Email**: Queued order confirmations, status updates and password reset messages
+- **Admin API**: Dashboard numbers, products with variants and photos, orders, customers, coupons, review moderation, contact messages and newsletter subscribers
+- **Newsletter**: Double opt-in with an unsubscribe link in every message, and a CSV export of confirmed addresses. It collects subscribers only and does not send campaigns
+- **Contact form**: Stored for the admin panel and emailed to the shop address
+- **Email**: Queued order confirmations, status updates, password reset, newsletter confirmation and contact form messages
 - **Invoices**: PDF invoices with net, VAT and gross amounts
 - **Images**: Thumbnails 640 px wide, created on upload and by `php artisan shop:thumbnails`
 - **Data seeding**: Products, variants, coupons, demo customers and reviews from one Artisan command
@@ -70,7 +72,9 @@ An admin is a normal customer account with the `is_admin` flag, so the login is 
 
 ### Email and Mailpit
 
-All mail goes to Mailpit, a local inbox that sends nothing to the outside world. Open it at the address printed by the setup script to read order confirmations, status updates and password reset links. Mail is queued and sent by the `queue` service, so a stopped worker delays messages but does not lose them.
+All mail goes to Mailpit, a local inbox that sends nothing to the outside world. Open it at the address printed by the setup script to read order confirmations, status updates, password reset links, newsletter confirmations and contact form messages. Mail is queued and sent by the `queue` service, so a stopped worker delays messages but does not lose them.
+
+The contact details returned by `GET /api/config`, including the address that receives contact form messages, come from the `SHOP_CONTACT_*` variables in `.env`. The defaults are fictional.
 
 ### Simulated payment
 
@@ -110,7 +114,7 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 docker compose exec backend php artisan shop:thumbnails   # create missing thumbnails
 ```
 
-> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database. It also creates variants, the coupons `WITAJ10` (10%) and `MINUS20` (20 zł from 150 zł), six demo customers and reviews.
+> **Product data:** `php artisan shop:seed` first tries the original mock API and, if it is unavailable, falls back to the bundled `backend/database/data/products.json`. Use `--local` to skip the API and `--if-empty` to seed only an empty database. It also creates variants, the coupons `WITAJ10` (10%) and `MINUS20` (20 zł from 150 zł), six demo customers and reviews, and marks a few products as on sale or new.
 >
 > **Upgrading an existing database:** the migrations add variants with a stock of 10 for every existing product, but `--if-empty` skips an existing shop, so coupons, demo customers and reviews appear only after `migrate:fresh` and a seed.
 
@@ -229,6 +233,8 @@ Every endpoint, with its request fields and response shape, is described in [bac
 - **order_status_events** - History of each order
 - **cart_items**, **wishlist_items**, **reviews** - Saved per customer
 - **coupons** - Discount codes and their limits
+- **newsletter_subscribers** - Addresses with their confirmation state
+- **contact_messages** - Messages from the contact form
 
 ### Key Features
 - **Multi-auth system** with separate guards for users and customers
@@ -293,6 +299,11 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=choose-a-long-password
+
+SHOP_CONTACT_EMAIL=kontakt@sklep.example
+SHOP_CONTACT_PHONE="+48 000 000 000"
+SHOP_CONTACT_ADDRESS="ul. Przykładowa 1, 00-001 Warszawa"
+SHOP_CONTACT_HOURS="pon.-pt. 9:00-17:00"
 ```
 
 ## 🆘 Troubleshooting

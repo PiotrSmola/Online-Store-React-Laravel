@@ -22,7 +22,9 @@ Base path `/api`. Requests and responses are JSON, except file uploads (multipar
 
 Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 
-**Money comes in two forms.** Fields of stored records are strings with two decimals: `cena`, `ocena` (one decimal), `total_amount`, `price`, `value`. Everything from a quote or from stats is a JSON number: `unit_price`, `subtotal`, `total`, `revenue`. Prices are gross PLN.
+**Money comes in two forms.** Fields of stored records are strings with two decimals: `cena`, `sale_price`, `effective_price`, `ocena` (one decimal), `total_amount`, `price`, `value`. Everything from a quote or from stats is a JSON number: `unit_price`, `subtotal`, `total`, `revenue`. Prices are gross PLN.
+
+**Sale prices.** `cena` is the regular price. `effective_price` is what a buyer pays: `sale_price` when there is one, otherwise `cena`. Show `effective_price`, and strike through `cena` when `is_on_sale` is true. Price filters, price sorts, quotes and orders all use the effective price.
 
 **Pagination.** Lists marked *paged* return Laravel's paginator and take `page`:
 
@@ -46,22 +48,28 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 | `POST /cart/quote` with a coupon | 30 | IP |
 | `POST /cart/quote` without a coupon | 120 | IP |
 | `POST /products/{product}/reviews` | 10 | customer |
+| `POST /contact` | 3 | IP |
+| `POST /newsletter/subscribe` | 5 | IP |
+| `POST /newsletter/confirm` and `/unsubscribe` | 10 together | IP |
 
 ## Shared shapes
 
 **Product card**, used by every list:
 
 ```json
-{"id":13, "nazwa":"T-shirt", "kategoria":"Odzież męska", "cena":"49.99", "ocena":"4.0", "reviews_count":1,
- "rozmiar":["S","M"], "kolor":["Biały"], "stock_total":115,
+{"id":13, "nazwa":"T-shirt", "kategoria":"Odzież męska", "cena":"49.99", "sale_price":"39.99",
+ "effective_price":"39.99", "is_on_sale":true, "discount_percent":20, "is_new":false,
+ "ocena":"4.0", "reviews_count":1, "rozmiar":["S","M"], "kolor":["Biały"], "stock_total":115,
  "images":[{"id":13, "product_id":13, "image_path":"zdj13.jpg", "order":0}]}
 ```
+
+`sale_price` is `null` and `discount_percent` is `0` for a product not on sale.
 
 **Quote**, returned by `POST /cart/quote`, `GET /cart` and `PUT /cart`:
 
 ```json
 {"lines":[{"key":"20:L:Czarny", "variant_id":155,
-           "product":{"id":20, "nazwa":"...", "cena":"159.99", "is_active":true, "images":[]},
+           "product":{"...":"product card fields without stock_total", "is_active":true},
            "size":"L", "color":"Czarny", "quantity":1, "unit_price":159.99, "line_total":159.99,
            "stock":15, "available":true, "error":null}],
  "subtotal":159.99, "discount":16, "coupon":{"code":"WITAJ10", "label":"Rabat 10%"}, "coupon_error":null,
@@ -69,6 +77,7 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
  "delivery_price":15.99, "free_delivery_from":300, "free_delivery_missing":156.01, "total":159.98}
 ```
 
+- `unit_price` is the effective price.
 - A line with a problem has `available: false` and a Polish `error`, and stays out of `subtotal`. `stock` is what that variant has, so a selector can offer it.
 - `product` is `null` when the product no longer exists.
 - `delivery_price` is `null` until a method is chosen, and `total` then has no delivery.
@@ -104,6 +113,7 @@ Nested field errors use dots: `cart_items.0.selected_size`, `shipping.city`.
 - `payment_status`: `unpaid`, `paid`, `failed`, `refunded`.
 - `pickup_point` is present only for `pickup_point` delivery. `card_last_four` appears after a card payment. `payment_details.instructions` is there for transfer and cash.
 - `selected_size` and `selected_color` are `null` for a product without that option.
+- `items.*.price` is the unit price actually paid and never changes. `items.*.product` is the product today, with only the fields shown here, so use `price` for anything about the order.
 
 **Customer**, returned by the account routes. The password is never included:
 
@@ -123,9 +133,11 @@ Active products. *Paged*, `data` holds product cards. Query, all optional:
 |---|---|
 | `q` | Text in the name or category, up to 100 characters |
 | `category` | Exact category name |
-| `min_price`, `max_price` | Numbers |
+| `min_price`, `max_price` | Numbers, compared with the effective price |
 | `size`, `color` | Exact values. Together they must match one variant |
-| `sort` | `newest` (default), `price_asc`, `price_desc`, `name`, `rating`. Anything else is a 422 |
+| `on_sale` | `1` for products with a sale price |
+| `is_new` | `1` for products marked new |
+| `sort` | `newest` (default), `price_asc`, `price_desc`, `name`, `rating`. Price sorts use the effective price. Anything else is a 422 |
 | `per_page` | 1 to 48, default 12. Over 48 is a 422 |
 | `page` | From 1 |
 
@@ -134,7 +146,8 @@ Active products. *Paged*, `data` holds product cards. Query, all optional:
 404 when the product is inactive. A token is optional and only affects `can_review`.
 
 ```json
-{"id":13, "nazwa":"...", "kategoria":"...", "cena":"49.99", "opis":"...", "ocena":"4.0", "reviews_count":1,
+{"id":13, "nazwa":"...", "kategoria":"...", "cena":"49.99", "sale_price":null, "effective_price":"49.99",
+ "is_on_sale":false, "discount_percent":0, "is_new":false, "opis":"...", "ocena":"4.0", "reviews_count":1,
  "rozmiar":["S"], "kolor":["Biały"], "is_active":true, "stock_total":115, "created_at":"...", "updated_at":"...",
  "images":[{"id":13, "product_id":13, "image_path":"zdj13.jpg", "order":0}],
  "variants":[{"id":90, "product_id":13, "size":"L", "color":"Biały", "stock":14}],
@@ -150,10 +163,11 @@ Active products. *Paged*, `data` holds product cards. Query, all optional:
 Query: `category` (optional). `categories` always covers the whole shop; the rest narrows to the category. Cached briefly.
 
 ```json
-{"categories":[{"name":"Akcesoria", "count":6}], "sizes":["36","S","M"], "colors":["Beżowy"], "price":{"min":49.99, "max":1299}}
+{"categories":[{"name":"Akcesoria", "count":6}], "sizes":["36","S","M"], "colors":["Beżowy"],
+ "price":{"min":49.99, "max":1299}, "counts":{"new":4, "on_sale":5}}
 ```
 
-`price` values are `null` when nothing matches.
+`price` is the range of effective prices, with `null` values when nothing matches.
 
 ### GET /categories
 
@@ -163,7 +177,9 @@ Query: `category` (optional). `categories` always covers the whole shop; the res
 
 ```json
 {"pickup_points":[{"code":"WAW01M", "address":"ul. Lipowa 12, 00-101 Warszawa"}],
- "bank_account":"12 3456 7890 1234 5678 9012 3456", "free_delivery_from":300}
+ "bank_account":"12 3456 7890 1234 5678 9012 3456", "free_delivery_from":300,
+ "contact":{"email":"kontakt@sklep.example", "phone":"+48 000 000 000",
+            "address":"ul. Przykładowa 1, 00-001 Warszawa", "opening_hours":"pon.-pt. 9:00-17:00"}}
 ```
 
 ## Cart
@@ -336,18 +352,52 @@ Simulated card payment. Owner only, card orders only.
 
 PDF download for the owner, `application/pdf` with a `Content-Disposition` file name. Fetch it with the bearer header and save the blob. 409 until the order is paid.
 
+## Contact
+
+### POST /contact
+
+No login.
+
+| Field | Rule |
+|---|---|
+| `name` | Required, up to 100 characters, one line |
+| `email` | Required |
+| `subject` | Required, up to 150 characters, one line |
+| `message` | Required, up to 5000 characters |
+| `website` | Honeypot. Render it hidden from people, with `tabindex="-1"` and `autocomplete="off"`, and leave it empty |
+
+200: `{"message":"..."}`. The message is stored and emailed to the shop address. A filled `website` gets the same reply and nothing is saved.
+
+## Newsletter
+
+Double opt-in: an address receives nothing until its owner follows the link in the confirmation email.
+
+### POST /newsletter/subscribe
+
+Body: `email`. The same 200 reply for every valid address, whether new, waiting or already confirmed, so the reply never reveals who is subscribed. A confirmation is sent at most once in 10 minutes.
+
+The email links to `{APP_URL}/newsletter/confirm?token=...` and `{APP_URL}/newsletter/unsubscribe?token=...`. These are frontend pages, which send the token to the two routes below.
+
+### POST /newsletter/confirm
+
+Body: `token`. 200: `{"message":"..."}`. A wrong or used token gives a 422 with `errors.token`.
+
+### POST /newsletter/unsubscribe
+
+Body: `token`. Deletes the address. 200: `{"message":"..."}`. A wrong or used token gives a 422 with `errors.token`.
+
 ## Admin 🛡
 
 All routes answer 401 to guests and 403 to normal customers, whether or not the id exists.
 
 ### GET /admin/stats
 
-`revenue` sums paid orders. `low_stock` lists up to 50 variants below 3, lowest first, and `low_stock_count` counts them all.
+`revenue` sums paid orders. `low_stock` lists up to 50 variants below 3, lowest first, and `low_stock_count` counts them all. `unread_messages` counts contact messages not yet read and `confirmed_subscribers` counts confirmed newsletter addresses.
 
 ```json
 {"revenue":300.97, "orders_count":2,
  "orders_by_status":{"pending":0, "processing":1, "shipped":0, "delivered":0, "cancelled":1},
- "low_stock_count":46,
+ "unread_messages":2, "confirmed_subscribers":17, "low_stock_count":46,
  "low_stock":[{"id":3, "product_id":1, "size":"M", "color":"Czarny", "stock":0, "product":{"id":1, "nazwa":"..."}}]}
 ```
 
@@ -361,8 +411,10 @@ Query: `q`, `page`. *Paged*, 20 per page, product cards with `is_active`, inacti
 |---|---|
 | `nazwa`, `kategoria` | Required, up to 255 characters |
 | `cena` | Required number, 0 or more |
+| `sale_price` | Optional number, must be lower than `cena`. `null` ends the sale |
 | `opis` | Required, up to 20000 characters |
 | `is_active` | Optional boolean, default true |
+| `is_new` | Optional boolean, default false |
 | `variants` | Required, 1 to 500 |
 | `variants.*.size`, `variants.*.color` | Optional strings. Must be unique together, ignoring case |
 | `variants.*.stock` | Required integer, 0 or more |
@@ -375,7 +427,7 @@ The same shape, also for inactive products.
 
 ### PUT /admin/products/{product}
 
-Same fields, all optional. `variants`, when sent, is the full list: matching rows are updated, new ones added, missing ones deleted.
+Same fields, all optional. `variants`, when sent, is the full list: matching rows are updated, new ones added, missing ones deleted. `sale_price` is checked against the resulting `cena`, so lowering `cena` under an existing sale is a 422 with `errors.sale_price` unless the same request changes or clears the sale.
 
 ### DELETE /admin/products/{product}
 
@@ -463,3 +515,33 @@ Same fields, all optional. `used_count` cannot be set. Returns the coupon.
 ### DELETE /admin/reviews/{review}
 
 Recalculates the product's rating. `{"message":"..."}`
+
+### GET /admin/messages
+
+Query: `unread` (`1` for unread only), `page`. *Paged*, 20 per page, newest first.
+
+```json
+{"id":1, "name":"Ewa Nowak", "email":"ewa@example.com", "subject":"...", "message":"...", "read_at":null, "created_at":"...", "updated_at":"..."}
+```
+
+Render `name`, `subject` and `message` as plain text.
+
+### PATCH /admin/messages/{message}/read
+
+No body. Sets `read_at`, keeping the first moment if repeated. Returns the message.
+
+### DELETE /admin/messages/{message}
+
+`{"message":"..."}`
+
+### GET /admin/newsletter
+
+Query: `q` (email), `page`. *Paged*, 20 per page. `confirmed_at` is `null` for an address still waiting. Tokens are never returned.
+
+```json
+{"id":1, "email":"a@example.com", "confirmed_at":"2026-11-06T12:00:00.000000Z", "created_at":"..."}
+```
+
+### GET /admin/newsletter/export
+
+CSV download of confirmed addresses only, `text/csv` with a `Content-Disposition` file name and the columns `email,confirmed_at`. Fetch it with the bearer header and save the blob. A cell that could run as a spreadsheet formula starts with an apostrophe.
