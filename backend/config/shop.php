@@ -36,6 +36,17 @@ return [
     // Percent. Prices in the shop are gross.
     'vat_rate' => 23,
 
+    // Card and transfer orders still unpaid after this long are cancelled and their stock freed.
+    'unpaid_order_hours' => (int) env('SHOP_UNPAID_ORDER_HOURS', 48),
+
+    // Open means pending and unpaid. Each one holds stock, so neither a customer nor an
+    // address can hold more than this at a time. Counted per address too because a
+    // guest can use a new email for every order.
+    'open_orders' => [
+        'per_customer' => 5,
+        'per_ip' => 10,
+    ],
+
     // Fictional defaults: `.example` is reserved and the number cannot be dialled. Contact
     // form messages are sent to this email.
     'contact' => [

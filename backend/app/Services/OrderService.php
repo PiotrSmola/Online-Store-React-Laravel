@@ -35,7 +35,8 @@ class OrderService
      *     billing_address: array,
      *     shipping_address: array,
      *     payment_details: array,
-     *     coupon_code?: ?string
+     *     coupon_code?: ?string,
+     *     client_ip_hash?: ?string
      * }  $checkout
      *
      * @throws ValidationException with errors.cart when a line cannot be bought,
@@ -87,6 +88,7 @@ class OrderService
                 'order_date' => now(),
             ]);
             $order->stock_deducted = true;
+            $order->client_ip_hash = $checkout['client_ip_hash'] ?? null;
             $order->save();
 
             foreach ($quote['lines'] as $line) {
@@ -108,6 +110,29 @@ class OrderService
 
             return $order;
         }, 3);
+    }
+
+    /**
+     * Every unpaid order holds stock, so a limit on how many can be open stops one visitor
+     * from buying a product out without paying. Call it inside the placing transaction.
+     *
+     * @throws HttpResponseException with a 429
+     */
+    public function ensureRoomForOpenOrder(Customer $customer, string $clientIpHash): void
+    {
+        // Makes a customer's own parallel orders count each other.
+        Customer::query()->whereKey($customer->id)->lockForUpdate()->first();
+
+        $open = Order::query()->where('status', 'pending')->whereIn('payment_status', ['unpaid', 'failed']);
+
+        $limits = config('shop.open_orders');
+
+        if ((clone $open)->where('customer_id', $customer->id)->count() >= $limits['per_customer']
+            || (clone $open)->where('client_ip_hash', $clientIpHash)->count() >= $limits['per_ip']) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'Masz zbyt wiele nieopłaconych zamówień. Opłać lub anuluj wcześniejsze, aby złożyć kolejne.',
+            ], 429));
+        }
     }
 
     /**

@@ -347,6 +347,7 @@ class OrderFlowTest extends TestCase
 
     public function test_orders_list_query_count_does_not_grow(): void
     {
+        config(['shop.open_orders.per_customer' => 100]);
         $customer = $this->createCustomer();
         $this->actingAs($customer, 'sanctum');
         $product = $this->createProduct();

@@ -10,9 +10,11 @@ use App\Services\InvoiceService;
 use App\Services\OrderService;
 use App\Support\PasswordAttempts;
 use App\Support\SafeExceptionContext;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +29,10 @@ class OrderController extends Controller
     private const ACCOUNT_EXISTS_MESSAGE = 'Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.';
 
     private const ORDERS_PER_PAGE = 20;
+
+    private const PLACEMENT_LOCK_SECONDS = 15;
+
+    private const PLACEMENT_WAIT_SECONDS = 3;
 
     public function __construct(private OrderService $orders, private CartPricing $pricing)
     {
@@ -43,9 +49,12 @@ class OrderController extends Controller
 
             $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
             $items = $this->checkedItems($validated['cart_items']);
+            $clientIpHash = hash_hmac('sha256', (string) $request->ip(), (string) config('app.key'));
 
-            // Failure paths must throw: a response returned from this closure would commit.
-            return DB::transaction(function () use ($request, $validated, $customer, $authenticatedCustomer, $items) {
+            // One placement per address at a time, or parallel orders would all pass the limit:
+            // no row stands for an address, so a database lock has nothing to hold.
+            // Failure paths must throw: a response returned from the closure would commit.
+            return Cache::lock("order-placement:{$clientIpHash}", self::PLACEMENT_LOCK_SECONDS)->block(self::PLACEMENT_WAIT_SECONDS, fn () => DB::transaction(function () use ($request, $validated, $customer, $authenticatedCustomer, $items, $clientIpHash) {
                 $customerData = $this->customerData($validated);
 
                 if ($customer) {
@@ -63,6 +72,8 @@ class OrderController extends Controller
                     }
                 }
 
+                $this->orders->ensureRoomForOpenOrder($customer, $clientIpHash);
+
                 $order = $this->orders->place($customer, [
                     'items' => $items,
                     'payment_method' => $validated['payment_method'],
@@ -71,6 +82,7 @@ class OrderController extends Controller
                     'shipping_address' => $this->shippingAddress($validated),
                     'payment_details' => $this->paymentDetails($validated),
                     'coupon_code' => $validated['coupon_code'] ?? null,
+                    'client_ip_hash' => $clientIpHash,
                 ]);
 
                 $response = [
@@ -86,7 +98,9 @@ class OrderController extends Controller
                 }
 
                 return response()->json($response);
-            }, 3);
+            }, 3));
+        } catch (LockTimeoutException) {
+            return PasswordAttempts::tooManyResponse();
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Błędy walidacji',

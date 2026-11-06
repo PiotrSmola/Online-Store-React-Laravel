@@ -56,6 +56,7 @@ class Order extends Model
     ];
 
     protected $hidden = [
+        'client_ip_hash',
         'invoice_sequence',
         'stock_deducted',
     ];

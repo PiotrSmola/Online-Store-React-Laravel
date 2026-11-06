@@ -138,6 +138,7 @@ $appDebug = Get-Setting 'APP_DEBUG' { $defaults['APP_DEBUG'] }
 $mailFromAddress = Get-Setting 'MAIL_FROM_ADDRESS' { $defaults['MAIL_FROM_ADDRESS'] }
 $adminEmail = Get-Setting 'ADMIN_EMAIL' { $defaults['ADMIN_EMAIL'] }
 $adminPassword = Get-Setting 'ADMIN_PASSWORD' { New-RandomString 20 }
+$unpaidOrderHours = Get-Setting 'SHOP_UNPAID_ORDER_HOURS' { $defaults['SHOP_UNPAID_ORDER_HOURS'] }
 $shopContactEmail = Get-Setting 'SHOP_CONTACT_EMAIL' { $defaults['SHOP_CONTACT_EMAIL'] }
 $shopContactPhone = Get-Setting 'SHOP_CONTACT_PHONE' { $defaults['SHOP_CONTACT_PHONE'] }
 $shopContactAddress = Get-Setting 'SHOP_CONTACT_ADDRESS' { $defaults['SHOP_CONTACT_ADDRESS'] }
@@ -184,6 +185,8 @@ DB_ROOT_PASSWORD=$dbRootPassword
 MAIL_FROM_ADDRESS=$mailFromAddress
 ADMIN_EMAIL=$adminEmail
 ADMIN_PASSWORD=$adminPassword
+
+SHOP_UNPAID_ORDER_HOURS=$unpaidOrderHours
 
 SHOP_CONTACT_EMAIL=$shopContactEmail
 SHOP_CONTACT_PHONE=$shopContactPhone

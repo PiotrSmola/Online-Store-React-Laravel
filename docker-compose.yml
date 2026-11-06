@@ -27,6 +27,7 @@ x-backend-environment: &backend-environment
   MAIL_FROM_NAME: "Online Store"
   ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+  SHOP_UNPAID_ORDER_HOURS: ${SHOP_UNPAID_ORDER_HOURS:-48}
   SHOP_CONTACT_EMAIL: "${SHOP_CONTACT_EMAIL:-kontakt@sklep.example}"
   SHOP_CONTACT_PHONE: "${SHOP_CONTACT_PHONE:-+48 000 000 000}"
   SHOP_CONTACT_ADDRESS: "${SHOP_CONTACT_ADDRESS:-ul. Przykładowa 1, 00-001 Warszawa}"
@@ -95,6 +96,21 @@ services:
       - product_images:/var/www/html/storage/app/public
     # The limits make the worker exit and restart, so a slow leak cannot build up.
     command: ["php", "artisan", "queue:work", "--tries=3", "--max-jobs=500", "--max-time=3600", "--memory=256"]
+
+  scheduler:
+    image: online-store-backend
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      <<: *backend-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - product_images:/var/www/html/storage/app/public
+    # Runs what routes/console.php schedules: expiring unpaid orders, pruning the newsletter.
+    command: ["php", "artisan", "schedule:work"]
 
   mailpit:
     image: axllent/mailpit
