@@ -1,10 +1,8 @@
 import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
-import { useCartCount } from '../../Context/useShop';
 import { useToast } from '../../Context/useToast';
 import { useCategories } from '../../hooks/useCatalog';
 import { onUnauthorized } from '../../lib/api';
-import { countProducts } from '../../lib/format';
 import { loginPath } from '../../lib/redirect';
 import Spinner from '../ui/Spinner';
 import ErrorBoundary from './ErrorBoundary';
@@ -12,16 +10,6 @@ import Footer from './Footer';
 import Header from './Header';
 
 const NO_CATEGORIES = [];
-
-function CartCountAnnouncer() {
-  const count = useCartCount();
-
-  return (
-    <p aria-live="polite" className="sr-only">
-      {`W koszyku: ${countProducts(count)}`}
-    </p>
-  );
-}
 
 export default function ShopLayout() {
   const { pathname } = useLocation();
@@ -65,7 +53,6 @@ export default function ShopLayout() {
       </main>
 
       <Footer categories={categoryNames} />
-      <CartCountAnnouncer />
     </div>
   );
 }

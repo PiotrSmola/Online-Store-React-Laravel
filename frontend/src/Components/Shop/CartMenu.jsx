@@ -15,44 +15,56 @@ const PANEL_ID = 'cart-preview';
 export default function CartMenu() {
   const count = useCartCount();
   const { pathname } = useLocation();
-  const [openOn, setOpenOn] = useState(null);
-  const open = openOn === pathname;
+  const [open, setOpen] = useState(false);
+  const [openedOn, setOpenedOn] = useState(pathname);
   const wrapper = useRef(null);
   const toggle = useRef(null);
+  const panel = useRef(null);
   const closeTimer = useRef(null);
 
+  // A new page closes the preview for good, also when the person comes back to this page later.
+  if (openedOn !== pathname) {
+    setOpenedOn(pathname);
+    setOpen(false);
+  }
+
   const cancelClose = () => clearTimeout(closeTimer.current);
-  const close = () => setOpenOn(null);
+  const close = () => setOpen(false);
 
   useEffect(() => () => clearTimeout(closeTimer.current), []);
 
+  // On the document, because a preview opened by hovering has no focus inside it.
   useEffect(() => {
     if (!open) return undefined;
 
     const closeOutside = (event) => {
-      if (!wrapper.current?.contains(event.target)) setOpenOn(null);
+      if (!wrapper.current?.contains(event.target)) setOpen(false);
     };
+
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (wrapper.current?.contains(document.activeElement)) toggle.current?.focus();
+      setOpen(false);
+    };
+
     document.addEventListener('pointerdown', closeOutside);
-    return () => document.removeEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
   }, [open]);
 
   const handlePointerEnter = (event) => {
     if (event.pointerType !== 'mouse') return;
     cancelClose();
-    setOpenOn(pathname);
+    setOpen(true);
   };
 
   const handlePointerLeave = (event) => {
     if (event.pointerType !== 'mouse') return;
     cancelClose();
     closeTimer.current = setTimeout(close, CLOSE_DELAY);
-  };
-
-  const handleKeyDown = (event) => {
-    if (event.key === 'Escape' && open) {
-      close();
-      toggle.current?.focus();
-    }
   };
 
   const handleBlur = (event) => {
@@ -65,7 +77,6 @@ export default function CartMenu() {
       className="flex items-center"
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
-      onKeyDown={handleKeyDown}
       onBlur={handleBlur}
     >
       <Link
@@ -82,18 +93,20 @@ export default function CartMenu() {
         aria-label="Podgląd koszyka"
         aria-expanded={open}
         aria-controls={PANEL_ID}
-        className="grid h-11 w-8 cursor-pointer place-items-center rounded-control hover:text-pine"
-        onClick={() => setOpenOn(open ? null : pathname)}
+        className="grid size-11 cursor-pointer place-items-center rounded-control hover:text-pine"
+        onClick={() => setOpen(!open)}
       >
         <ChevronDown aria-hidden="true" className={`size-4 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       <div
+        ref={panel}
         id={PANEL_ID}
+        tabIndex={-1}
         hidden={!open}
-        className="absolute inset-x-0 top-full z-30 max-h-[calc(100dvh-4rem)] overflow-y-auto bg-mist p-4 sm:left-auto sm:w-96 lg:right-4"
+        className="absolute inset-x-0 top-full z-30 max-h-[calc(100dvh-4rem)] overflow-y-auto bg-mist p-4 outline-none sm:left-auto sm:w-96 lg:right-4"
       >
-        {open && <CartPreview onNavigate={close} />}
+        {open && <CartPreview onNavigate={close} onRemoved={() => panel.current?.focus()} />}
       </div>
     </div>
   );

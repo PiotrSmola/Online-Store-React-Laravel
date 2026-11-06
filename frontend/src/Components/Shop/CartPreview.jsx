@@ -9,10 +9,11 @@ import CartLine from './CartLine';
 const VISIBLE_LINES = 4;
 
 /** The content of the header's cart panel. It prices the cart only while it is open. */
-export default function CartPreview({ onNavigate }) {
+export default function CartPreview({ onNavigate, onRemoved }) {
   const items = useCartItems();
   const { data: quote, error } = useCartQuote(items);
   const hidden = items.length - VISIBLE_LINES;
+  const hasUnavailable = quote?.lines.some((line) => !line.available);
 
   if (items.length === 0) {
     return (
@@ -34,6 +35,7 @@ export default function CartPreview({ onNavigate }) {
             item={item}
             line={quote?.lines.find((line) => line.key === lineKey(item))}
             compact
+            onRemoved={onRemoved}
           />
         ))}
       </ul>
@@ -46,10 +48,14 @@ export default function CartPreview({ onNavigate }) {
         <span className="font-semibold">{formatPrice(quote?.subtotal)}</span>
       </p>
 
+      {hasUnavailable && <p className="mt-3 text-sm text-ember">Usuń niedostępne produkty, aby przejść dalej.</p>}
+
       <div className="mt-4 grid gap-2">
-        <ButtonLink to="/checkout" block onClick={onNavigate}>
-          Przejdź do zamówienia
-        </ButtonLink>
+        {!hasUnavailable && (
+          <ButtonLink to="/checkout" block onClick={onNavigate}>
+            Przejdź do zamówienia
+          </ButtonLink>
+        )}
         <ButtonLink to="/cart" variant="secondary" block onClick={onNavigate}>
           Zobacz koszyk
         </ButtonLink>
@@ -60,4 +66,5 @@ export default function CartPreview({ onNavigate }) {
 
 CartPreview.propTypes = {
   onNavigate: PropTypes.func.isRequired,
+  onRemoved: PropTypes.func.isRequired,
 };
