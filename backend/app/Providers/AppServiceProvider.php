@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Customer;
 use App\Support\PasswordAttempts;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -27,6 +29,13 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn () => Password::min(8));
 
+        ResetPassword::createUrlUsing(fn (Customer $customer, string $token) => sprintf(
+            '%s/reset-password?token=%s&email=%s',
+            rtrim(config('app.url'), '/'),
+            urlencode($token),
+            urlencode($customer->getEmailForPasswordReset())
+        ));
+
         $tooManyAttempts = fn (Request $request, array $headers) => PasswordAttempts::tooManyResponse($headers);
 
         RateLimiter::for('login', function (Request $request) use ($tooManyAttempts) {
@@ -41,6 +50,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('orders', function (Request $request) use ($tooManyAttempts) {
             return Limit::perMinute(20)->by($request->ip())->response($tooManyAttempts);
         });
+
+        // Each is counted per address: these routes have no account to key on yet.
+        foreach (['register' => 5, 'forgot-password' => 5, 'reset-password' => 10] as $name => $perMinute) {
+            RateLimiter::for($name, fn (Request $request) => Limit::perMinute($perMinute)
+                ->by($request->ip())
+                ->response($tooManyAttempts));
+        }
 
         // The cart asks for a quote on every change. Only requests carrying a coupon can
         // guess codes, so those have their own, tighter budget.
