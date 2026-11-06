@@ -267,7 +267,7 @@ This project is released under the GNU General Public License v3.0. See [LICENSE
 
 ## Interface Preview
 
-Screenshots of the running application with seeded demo data. Names, addresses and orders are fictional, and the interface is in Polish.
+Screenshots of the running application with demo data. Names, addresses and orders are fictional, and the interface is in Polish.
 
 ### Shop
 
@@ -283,36 +283,14 @@ Screenshots of the running application with seeded demo data. Names, addresses a
 
 | Checkout | Test payment |
 |----------|--------------|
-| ![Checkout with a parcel locker and a coupon](docs/screenshots/05-checkout.jpg) | ![Simulated card payment screen](docs/screenshots/06-payment.jpg) |
+| ![Checkout with a parcel locker and a coupon](docs/screenshots/05-checkout.jpg) | ![Simulated card payment screen with a declined card](docs/screenshots/06-payment.jpg) |
 
-| Order with status history | Account |
-|---------------------------|---------|
-| ![Paid order with its status history](docs/screenshots/07-order.jpg) | ![Customer account page](docs/screenshots/08-account.jpg) |
-
-| Wishlist | Contact |
-|----------|---------|
-| ![Wishlist](docs/screenshots/09-wishlist.jpg) | ![Contact form](docs/screenshots/10-contact.jpg) |
-
-### Admin panel
-
-| Overview | Products |
-|----------|----------|
-| ![Admin overview with sales and low stock](docs/screenshots/11-admin-overview.jpg) | ![Admin product list](docs/screenshots/12-admin-products.jpg) |
-
-| Product form | Orders |
-|--------------|--------|
-| ![Product form with variants and photos](docs/screenshots/13-admin-product-form.jpg) | ![Admin order list](docs/screenshots/14-admin-orders.jpg) |
-
-| Order details | Coupons |
-|---------------|---------|
-| ![Admin order details with status actions](docs/screenshots/15-admin-order.jpg) | ![Coupon list](docs/screenshots/16-admin-coupons.jpg) |
-
-| Messages | Newsletter |
-|----------|------------|
-| ![Contact messages](docs/screenshots/17-admin-messages.jpg) | ![Newsletter subscribers](docs/screenshots/18-admin-newsletter.jpg) |
+| Order with status history | Wishlist |
+|---------------------------|----------|
+| ![Paid order with its status history](docs/screenshots/07-order.jpg) | ![Wishlist](docs/screenshots/08-wishlist.jpg) |
 
 ### Mobile
 
-| Home | Product | Checkout | Admin |
-|------|---------|----------|-------|
-| <img src="docs/screenshots/19-mobile-home.jpg" alt="Home page on a phone" width="200"> | <img src="docs/screenshots/20-mobile-product.jpg" alt="Product page on a phone" width="200"> | <img src="docs/screenshots/21-mobile-checkout.jpg" alt="Checkout on a phone" width="200"> | <img src="docs/screenshots/22-mobile-admin.jpg" alt="Admin panel on a phone" width="200"> |
+| Home | Product | Checkout |
+|------|---------|----------|
+| <img src="docs/screenshots/09-mobile-home.jpg" alt="Home page on a phone" width="220"> | <img src="docs/screenshots/10-mobile-product.jpg" alt="Product page on a phone" width="220"> | <img src="docs/screenshots/11-mobile-checkout.jpg" alt="Checkout on a phone" width="220"> |
