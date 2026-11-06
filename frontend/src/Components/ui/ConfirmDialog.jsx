@@ -31,7 +31,7 @@ export default function ConfirmDialog({ open, title, text, confirmLabel, onConfi
       <p className="mt-2 text-stone">{text}</p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Button variant="secondary" onClick={onCancel}>
-          Anuluj
+          Wróć
         </Button>
         <Button onClick={onConfirm}>{confirmLabel}</Button>
       </div>
