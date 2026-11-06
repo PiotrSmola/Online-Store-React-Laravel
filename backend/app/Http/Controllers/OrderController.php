@@ -40,10 +40,6 @@ class OrderController extends Controller
                 'cart_items.*.quantity.max' => 'Maksymalna ilość jednego produktu to 99',
             ]);
 
-            if ($validated['payment_method'] === 'card') {
-                $this->validateCardPayment($validated['payment']);
-            }
-
             $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
             $items = $this->checkedItems($validated['cart_items']);
 
@@ -148,11 +144,6 @@ class OrderController extends Controller
             'cart_items.*.quantity' => 'required|integer|min:1|max:99',
             'cart_items.*.selected_size' => 'nullable|string|max:255',
             'cart_items.*.selected_color' => 'nullable|string|max:255',
-            'payment' => 'required|array',
-            'payment.card_number' => 'required_if:payment_method,card|nullable|string',
-            'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
-            'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
-            'payment.cvv' => 'required_if:payment_method,card|nullable|string',
         ];
     }
 
@@ -309,87 +300,13 @@ class OrderController extends Controller
         $method = $validated['payment_method'];
         $details = ['method' => $method];
 
-        if ($method === 'card') {
-            $details['card_last_four'] = substr(str_replace(' ', '', $validated['payment']['card_number']), -4);
-            $details['card_name'] = $validated['payment']['card_name'];
-        } elseif ($method === 'transfer') {
+        if ($method === 'transfer') {
             $details['instructions'] = 'Przelew na konto: ' . config('shop.bank_account');
-        } else {
+        } elseif ($method === 'cash') {
             $details['instructions'] = 'Płatność przy odbiorze w sklepie';
         }
 
         return $details;
-    }
-
-    // Walidacja płatności kartą (algorytm Luhn)
-    private function validateCardPayment($paymentData)
-    {
-        $errors = [];
-
-        $cardNumber = str_replace(' ', '', $paymentData['card_number']);
-
-        if (!$this->validateCardNumberLuhn($cardNumber)) {
-            $errors['payment.card_number'] = ['Nieprawidłowy numer karty'];
-        }
-
-        if (strlen($cardNumber) < 13 || strlen($cardNumber) > 19) {
-            $errors['payment.card_number'] = ['Numer karty musi mieć od 13 do 19 cyfr'];
-        }
-
-        if (!preg_match('/^\d{2}\/\d{2}$/', $paymentData['expiry_date'])) {
-            $errors['payment.expiry_date'] = ['Data ważności musi być w formacie MM/RR'];
-        } else {
-            [$month, $year] = explode('/', $paymentData['expiry_date']);
-            $currentYear = date('y');
-            $currentMonth = date('n');
-
-            if ($month < 1 || $month > 12) {
-                $errors['payment.expiry_date'] = ['Nieprawidłowy miesiąc'];
-            } elseif ($year < $currentYear || ($year == $currentYear && $month < $currentMonth)) {
-                $errors['payment.expiry_date'] = ['Karta jest przeterminowana'];
-            }
-        }
-
-        // Walidacja CVV
-        if (!preg_match('/^\d{3,4}$/', $paymentData['cvv'])) {
-            $errors['payment.cvv'] = ['CVV musi mieć 3-4 cyfry'];
-        }
-
-        if (empty(trim($paymentData['card_name']))) {
-            $errors['payment.card_name'] = ['Imię i nazwisko posiadacza karty jest wymagane'];
-        }
-
-        if (!empty($errors)) {
-            throw ValidationException::withMessages($errors);
-        }
-    }
-
-    // Algorytm Luhn do walidacji numeru karty kredytowej
-    private function validateCardNumberLuhn($cardNumber)
-    {
-        if (!ctype_digit($cardNumber)) {
-            return false;
-        }
-
-        $digits = str_split($cardNumber);
-        $sum = 0;
-        $alternate = false;
-
-        for ($i = count($digits) - 1; $i >= 0; $i--) {
-            $n = intval($digits[$i]);
-
-            if ($alternate) {
-                $n *= 2;
-                if ($n > 9) {
-                    $n = ($n % 10) + 1;
-                }
-            }
-
-            $sum += $n;
-            $alternate = !$alternate;
-        }
-
-        return ($sum % 10) === 0;
     }
 
     public function index(Request $request)
@@ -417,6 +334,27 @@ class OrderController extends Controller
         $cancelled = $this->orders->changeStatus($order, 'cancelled', 'Anulowane przez klienta', requiredStatus: 'pending');
 
         return response()->json($cancelled->load(Order::DETAILS));
+    }
+
+    public function pay(Request $request, Order $order)
+    {
+        $this->ensureOwner($request, $order);
+
+        $validated = $request->validate([
+            'card_last_four' => ['required', 'string', 'regex:/\A[0-9]{4}\z/'],
+        ]);
+
+        $order = $this->orders->pay($order, $validated['card_last_four'])->load(Order::DETAILS);
+
+        // The failed state has to stay saved, so a decline is not an exception out of the transaction.
+        if ($order->payment_status === 'failed') {
+            return response()->json([
+                'message' => 'Płatność została odrzucona. Spróbuj ponownie lub użyj innej karty.',
+                'order' => $order,
+            ], 402);
+        }
+
+        return response()->json($order);
     }
 
     private function ensureOwner(Request $request, Order $order): void

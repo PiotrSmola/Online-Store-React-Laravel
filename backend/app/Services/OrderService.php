@@ -6,12 +6,16 @@ use App\Models\CartItem;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProductVariant;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
+    /** The simulator's test card: any card ending in these digits is declined. */
+    private const DECLINED_CARD_LAST_FOUR = '0002';
+
     public function __construct(private CartPricing $pricing)
     {
     }
@@ -124,6 +128,88 @@ class OrderService
 
             return $locked;
         }, 3);
+    }
+
+    /**
+     * Simulated card payment. Only the last four digits ever reach the server.
+     * Decided under the row lock, so an order can be paid only once however many requests race.
+     *
+     * @return Order with payment_status paid, or failed when the card was declined
+     */
+    public function pay(Order $order, string $cardLastFour): Order
+    {
+        return DB::transaction(function () use ($order, $cardLastFour) {
+            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+
+            if ($locked->payment_method !== 'card') {
+                throw ValidationException::withMessages([
+                    'payment' => ['To zamówienie nie jest opłacane kartą.'],
+                ]);
+            }
+
+            $this->ensurePayable($locked);
+
+            if ($cardLastFour === self::DECLINED_CARD_LAST_FOUR) {
+                $locked->payment_status = 'failed';
+                $locked->save();
+
+                return $locked;
+            }
+
+            $locked->payment_details = array_merge($locked->payment_details, ['card_last_four' => $cardLastFour]);
+
+            return $this->settle($locked, 'Płatność kartą przyjęta');
+        }, 3);
+    }
+
+    /** Transfers and cash are confirmed by an admin; cards pay through pay(). */
+    public function markPaid(Order $order): Order
+    {
+        return DB::transaction(function () use ($order) {
+            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+
+            if ($locked->payment_method === 'card') {
+                throw ValidationException::withMessages([
+                    'payment' => ['Płatność kartą opłaca klient.'],
+                ]);
+            }
+
+            $this->ensurePayable($locked);
+
+            return $this->settle($locked, 'Płatność potwierdzona przez sklep');
+        }, 3);
+    }
+
+    private function ensurePayable(Order $order): void
+    {
+        $problem = match (true) {
+            $order->status === 'cancelled' => 'To zamówienie zostało anulowane.',
+            $order->payment_status === 'paid' => 'To zamówienie jest już opłacone.',
+            $order->payment_status === 'refunded' => 'Płatność za to zamówienie została zwrócona.',
+            default => null,
+        };
+
+        if ($problem) {
+            throw new HttpResponseException(response()->json(['message' => $problem], 409));
+        }
+    }
+
+    private function settle(Order $order, string $note): Order
+    {
+        $order->payment_status = 'paid';
+        $order->paid_at = now();
+
+        // An admin may already have moved the order on. Payment never moves it back.
+        if ($order->status === 'pending') {
+            $order->status = 'processing';
+        }
+
+        $order->save();
+        $this->recordEvent($order, $order->status, $note);
+
+        Log::info('Order paid', ['order_id' => $order->id]);
+
+        return $order;
     }
 
     // The WHERE repeats the check the lock already made, so stock cannot go below zero

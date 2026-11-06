@@ -50,9 +50,6 @@ trait BuildsOrders
         ], $overrides));
     }
 
-    /**
-     * Same shape as the body sent by frontend/src/Components/Shop/Checkout.jsx.
-     */
     protected function orderPayload(Product $product, array $overrides = []): array
     {
         return array_merge([
@@ -70,12 +67,6 @@ trait BuildsOrders
             'country' => 'Polska',
             'payment_method' => 'card',
             'delivery_method' => 'courier',
-            'payment' => [
-                'card_number' => '4242 4242 4242 4242',
-                'card_name' => 'Jan Kowalski',
-                'expiry_date' => now()->addYear()->format('m/y'),
-                'cvv' => '123',
-            ],
             'cart_items' => [[
                 'product_id' => $product->id,
                 'quantity' => 1,
