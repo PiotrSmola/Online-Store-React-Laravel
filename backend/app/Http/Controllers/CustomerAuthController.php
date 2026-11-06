@@ -13,7 +13,7 @@ class CustomerAuthController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required',
+            'password' => 'required|string',
         ]);
 
         $customer = Customer::where('email', $request->email)->first();

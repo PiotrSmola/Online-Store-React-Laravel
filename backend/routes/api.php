@@ -12,9 +12,9 @@ Route::get('/products/{product}', [ProductController::class, 'show']);
 Route::get('/products/category/{category}', [ProductController::class, 'byCategory']);
 Route::get('/categories', [ProductController::class, 'categories']);
 
-Route::post('/customer/login', [CustomerAuthController::class, 'login']);
+Route::post('/customer/login', [CustomerAuthController::class, 'login'])->middleware('throttle:login');
 
-Route::post('/orders', [OrderController::class, 'store']);
+Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:orders');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/customer/logout', [CustomerAuthController::class, 'logout']);
