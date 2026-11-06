@@ -1,5 +1,5 @@
 import { Suspense, useEffect } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router';
+import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import { useCartCount } from '../../Context/useShop';
 import { useToast } from '../../Context/useToast';
 import { useCategories } from '../../hooks/useCatalog';
@@ -26,13 +26,15 @@ function CartCountAnnouncer() {
 export default function ShopLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const toast = useToast();
   const categories = useCategories();
   const categoryNames = categories.data ?? NO_CATEGORIES;
 
+  // The back and forward buttons keep the browser's own scroll position.
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    if (navigationType !== 'POP') window.scrollTo(0, 0);
+  }, [pathname, navigationType]);
 
   useEffect(
     () =>
@@ -54,7 +56,7 @@ export default function ShopLayout() {
 
       <Header categories={categoryNames} />
 
-      <main id="main" tabIndex={-1} className="grow outline-none">
+      <main id="main" tabIndex={-1} className="min-h-dvh grow outline-none">
         <ErrorBoundary resetKey={pathname}>
           <Suspense fallback={<Spinner />}>
             <Outlet context={categories} />
