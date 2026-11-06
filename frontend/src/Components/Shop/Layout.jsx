@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import { ShopDataContext } from '../../Context/useShopData';
 import { useToast } from '../../Context/useToast';
@@ -17,6 +17,7 @@ export default function ShopLayout() {
   const toast = useToast();
   const categories = useCategories();
   const config = useShopConfig();
+  const shopData = useMemo(() => ({ categories, config }), [categories, config]);
 
   // The back and forward buttons keep the browser's own scroll position.
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function ShopLayout() {
   );
 
   return (
-    <ShopDataContext value={{ categories, config }}>
+    <ShopDataContext value={shopData}>
       <div className="flex min-h-dvh flex-col">
         <a
           href="#main"

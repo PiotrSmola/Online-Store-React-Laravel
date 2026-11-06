@@ -37,6 +37,17 @@ async function settle(call, value) {
 afterEach(cleanup);
 
 describe('useResource', () => {
+  it('gives the same object until something changes', async () => {
+    const { load, calls } = manualLoader();
+    const { result, rerender } = render(load, 'a');
+    await settle(calls[0], 'first');
+
+    const first = result.current;
+    rerender({ key: 'a' });
+
+    expect(result.current).toBe(first);
+  });
+
   it('loads and reports the data', async () => {
     const { load, calls } = manualLoader();
     const { result } = render(load, 'a');

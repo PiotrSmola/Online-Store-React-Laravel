@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isAbortError } from '../lib/api';
 
 /**
@@ -36,10 +36,9 @@ export function useResource(load, key, { keepPrevious = false } = {}) {
   const reload = useCallback(() => setAttempt((current) => current + 1), []);
   const isCurrent = settled.requestId === requestId;
 
-  return {
-    data: isCurrent || keepPrevious ? settled.data : undefined,
-    error: isCurrent ? settled.error : null,
-    loading: requestId !== null && !isCurrent,
-    reload,
-  };
+  const data = isCurrent || keepPrevious ? settled.data : undefined;
+  const error = isCurrent ? settled.error : null;
+  const loading = requestId !== null && !isCurrent;
+
+  return useMemo(() => ({ data, error, loading, reload }), [data, error, loading, reload]);
 }
