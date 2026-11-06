@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { AUTH_STATUS } from '../../Context/authStatus';
 import { useAuth } from '../../Context/useShop';
+import { useForm } from '../../hooks/useForm';
 import { safeRedirect } from '../../lib/redirect';
 import { signIn } from '../../lib/session';
 import Button from '../ui/Button';
@@ -10,6 +11,7 @@ import Field from '../ui/Field';
 import PageHeading from '../ui/PageHeading';
 
 const FIELD_IDS = { email: 'login-email', password: 'login-password' };
+const LINK = 'inline-block py-2 text-pine underline underline-offset-4';
 
 function clientErrors({ email, password }) {
   const errors = {};
@@ -21,67 +23,43 @@ function clientErrors({ email, password }) {
 export default function CustomerLogin() {
   const { status, signInWith } = useAuth();
   const [searchParams] = useSearchParams();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
-  const [formError, setFormError] = useState(null);
-  const [failedSubmits, setFailedSubmits] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
+  const [values, setValues] = useState({ email: '', password: '' });
+  const form = useForm(FIELD_IDS);
+  const next = safeRedirect(searchParams.get('next'));
 
-  if (status === AUTH_STATUS.authenticated) {
-    return <Navigate to={safeRedirect(searchParams.get('next'))} replace />;
-  }
+  if (status === AUTH_STATUS.authenticated) return <Navigate to={next} replace />;
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
-    setErrors((current) => ({ ...current, [name]: undefined }));
+    setValues((current) => ({ ...current, [name]: value }));
+    form.setFieldError(name, null);
   };
 
-  const fail = (fieldErrors, message = null) => {
-    setErrors(fieldErrors);
-    setFormError(message);
-    setFailedSubmits((count) => count + 1);
-  };
-
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
-    if (submitting) return;
+    if (form.submitting) return;
 
-    const found = clientErrors(form);
+    const found = clientErrors(values);
     if (Object.keys(found).length > 0) {
-      fail(found);
+      form.fail(found);
       return;
     }
 
-    setSubmitting(true);
-
-    try {
-      const { customer, token } = await signIn(form);
+    form.reset();
+    form.run(async () => {
+      const { customer, token } = await signIn(values);
       signInWith(customer, token);
-    } catch (error) {
-      const fieldErrors = Object.fromEntries(
-        Object.entries(error.errors ?? {}).map(([field, messages]) => [field, messages[0]]),
-      );
-      fail(fieldErrors, Object.keys(fieldErrors).length > 0 ? null : error.message);
-      setSubmitting(false);
-    }
+    });
   };
-
-  const summary = [
-    ...Object.entries(errors)
-      .filter(([, message]) => message)
-      .map(([field, message]) => ({ id: FIELD_IDS[field], message })),
-    ...(formError ? [{ message: formError }] : []),
-  ];
 
   return (
     <div className="gutter py-8 lg:py-12">
       <div className="max-w-md">
         <PageHeading>Logowanie</PageHeading>
 
-        {summary.length > 0 && (
+        {form.failedSubmits > 0 && form.summary.length > 0 && (
           <div className="mt-6">
-            <ErrorSummary errors={summary} focusKey={failedSubmits} title="Nie udało się zalogować" />
+            <ErrorSummary errors={form.summary} focusKey={form.failedSubmits} title="Nie udało się zalogować" />
           </div>
         )}
 
@@ -93,8 +71,8 @@ export default function CustomerLogin() {
             type="email"
             autoComplete="email"
             required
-            value={form.email}
-            error={errors.email}
+            value={values.email}
+            error={form.errors.email}
             onChange={handleChange}
           />
           <Field
@@ -104,19 +82,27 @@ export default function CustomerLogin() {
             type="password"
             autoComplete="current-password"
             required
-            value={form.password}
-            error={errors.password}
+            value={values.password}
+            error={form.errors.password}
             onChange={handleChange}
           />
-          <Button type="submit" block loading={submitting}>
+          <Button type="submit" block loading={form.submitting}>
             Zaloguj się
           </Button>
         </form>
 
-        <p className="mt-6 text-stone">Nie masz konta? Założymy je przy pierwszym zamówieniu.</p>
-        <Link to="/products" className="mt-2 inline-block py-2 text-pine underline underline-offset-4">
-          Zobacz produkty
-        </Link>
+        <ul className="mt-6">
+          <li>
+            <Link to="/forgot-password" className={LINK}>
+              Nie pamiętam hasła
+            </Link>
+          </li>
+          <li>
+            <Link to={searchParams.get('next') ? `/register?next=${encodeURIComponent(next)}` : '/register'} className={LINK}>
+              Załóż konto
+            </Link>
+          </li>
+        </ul>
       </div>
     </div>
   );

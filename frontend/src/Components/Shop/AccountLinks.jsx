@@ -3,15 +3,20 @@ import { Link } from 'react-router';
 import { useAuth } from '../../Context/useShop';
 import { AUTH_STATUS } from '../../Context/authStatus';
 
-/** Login, or orders and logout. className styles each link and button. */
+/** Links for the drawer and the footer. className styles each link and button. */
 export default function AccountLinks({ className, onNavigate }) {
   const { status, signOutCustomer } = useAuth();
 
   if (status === AUTH_STATUS.guest) {
     return (
-      <Link to="/login" className={className} onClick={onNavigate}>
-        Zaloguj się
-      </Link>
+      <>
+        <Link to="/login" className={className} onClick={onNavigate}>
+          Zaloguj się
+        </Link>
+        <Link to="/register" className={className} onClick={onNavigate}>
+          Załóż konto
+        </Link>
+      </>
     );
   }
 
@@ -19,6 +24,9 @@ export default function AccountLinks({ className, onNavigate }) {
 
   return (
     <>
+      <Link to="/account" className={className} onClick={onNavigate}>
+        Moje konto
+      </Link>
       <Link to="/orders" className={className} onClick={onNavigate}>
         Moje zamówienia
       </Link>

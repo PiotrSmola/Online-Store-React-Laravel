@@ -1,23 +1,37 @@
-import PropTypes from 'prop-types';
 import { Link } from 'react-router';
+import { useShopData } from '../../Context/useShopData';
 import { categoryPath } from '../../lib/product';
 import AccountLinks from './AccountLinks';
+import NewsletterForm from './NewsletterForm';
 
 const LINK = 'inline-block py-1.5 underline-offset-4 hover:text-pine hover:underline';
 
-export default function Footer({ categories }) {
+function phoneHref(phone) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
+}
+
+export default function Footer() {
+  const { categories, config } = useShopData();
+  const categoryNames = categories.data ?? [];
+  const contact = config.data?.contact;
+
   return (
     <footer className="gutter bg-mist py-12">
       <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-        <p className="text-3xl font-bold font-stretch-condensed">Sklep</p>
+        <section aria-labelledby="footer-newsletter">
+          <h2 id="footer-newsletter" className="mb-2 text-xl">
+            Newsletter
+          </h2>
+          <NewsletterForm />
+        </section>
 
-        {categories.length > 0 && (
+        {categoryNames.length > 0 && (
           <section aria-labelledby="footer-categories">
             <h2 id="footer-categories" className="mb-2 text-xl">
               Kategorie
             </h2>
             <ul>
-              {categories.map((category) => (
+              {categoryNames.map((category) => (
                 <li key={category}>
                   <Link to={categoryPath(category)} className={LINK}>
                     {category}
@@ -39,6 +53,16 @@ export default function Footer({ categories }) {
               </Link>
             </li>
             <li>
+              <Link to="/new" className={LINK}>
+                Nowości
+              </Link>
+            </li>
+            <li>
+              <Link to="/sale" className={LINK}>
+                Wyprzedaż
+              </Link>
+            </li>
+            <li>
               <Link to="/cart" className={LINK}>
                 Koszyk
               </Link>
@@ -55,23 +79,29 @@ export default function Footer({ categories }) {
           </h2>
           <ul>
             <li>
-              <a href="mailto:sklep@example.com" className={LINK}>
-                sklep@example.com
-              </a>
+              <Link to="/contact" className={LINK}>
+                Napisz do nas
+              </Link>
             </li>
-            <li>
-              <a href="tel:+44123123" className={LINK}>
-                0044 123 123
-              </a>
-            </li>
+            {contact?.email && (
+              <li>
+                <a href={`mailto:${contact.email}`} className={LINK}>
+                  {contact.email}
+                </a>
+              </li>
+            )}
+            {contact?.phone && (
+              <li>
+                <a href={phoneHref(contact.phone)} className={LINK}>
+                  {contact.phone}
+                </a>
+              </li>
+            )}
           </ul>
-          <p className="mt-3 text-stone">Płacisz kartą, przelewem lub w sklepie.</p>
+          {contact?.address && <p className="mt-3 text-stone">{contact.address}</p>}
+          {contact?.opening_hours && <p className="text-stone">{contact.opening_hours}</p>}
         </section>
       </div>
     </footer>
   );
 }
-
-Footer.propTypes = {
-  categories: PropTypes.arrayOf(PropTypes.string).isRequired,
-};
