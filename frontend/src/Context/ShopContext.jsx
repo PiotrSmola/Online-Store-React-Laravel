@@ -195,9 +195,9 @@ export default function ShopProvider({ children }) {
   };
 
   return (
-    <ShopContext.Provider value={value}>
+    <ShopContext value={value}>
       {children}
-    </ShopContext.Provider>
+    </ShopContext>
   );
 }
 
