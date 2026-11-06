@@ -71,7 +71,7 @@ class OrderService
                 throw ValidationException::withMessages(['coupon_code' => ['Ten kod rabatowy został już wykorzystany']]);
             }
 
-            $order = Order::create([
+            $order = new Order([
                 'customer_id' => $customer->id,
                 'subtotal_amount' => $quote['subtotal'],
                 'discount_amount' => $quote['discount'],
@@ -86,6 +86,8 @@ class OrderService
                 'payment_details' => $checkout['payment_details'],
                 'order_date' => now(),
             ]);
+            $order->stock_deducted = true;
+            $order->save();
 
             foreach ($quote['lines'] as $line) {
                 $order->items()->create([
@@ -134,7 +136,10 @@ class OrderService
             }
 
             if ($status === 'cancelled') {
-                $this->returnStock($locked);
+                // Orders from before stock tracking took nothing, so they have nothing to give back.
+                if ($locked->stock_deducted) {
+                    $this->returnStock($locked);
+                }
 
                 if ($locked->coupon_code) {
                     Coupon::releaseUse($locked->coupon_code);
@@ -172,6 +177,10 @@ class OrderService
             }
 
             $this->ensurePayable($locked);
+
+            if (!$locked->stock_deducted) {
+                throw new HttpResponseException(response()->json(['message' => 'Tego zamówienia nie można opłacić online.'], 409));
+            }
 
             if ($cardLastFour === self::DECLINED_CARD_LAST_FOUR) {
                 $locked->payment_status = 'failed';

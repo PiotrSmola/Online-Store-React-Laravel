@@ -130,6 +130,66 @@ class SeedingTest extends TestCase
         $this->assertSame(6, Customer::count());
     }
 
+    public function test_if_empty_fills_a_shop_that_only_has_products(): void
+    {
+        $products = collect(range(1, 4))->map(fn ($i) => $this->createProduct(['nazwa' => "Istniejący {$i}"]));
+
+        $this->artisan('shop:seed --local --if-empty')->assertSuccessful();
+
+        $this->assertSame(4, Product::count());
+        $this->assertSame(2, Coupon::count());
+        $this->assertSame(6, Customer::count());
+        $this->assertSame(4, Review::query()->distinct()->count('product_id'));
+        $this->assertGreaterThan(0, $products[0]->fresh()->reviews_count);
+    }
+
+    public function test_if_empty_on_a_filled_shop_duplicates_nothing(): void
+    {
+        $this->createProduct();
+        $this->artisan('shop:seed --local --if-empty')->assertSuccessful();
+        $reviews = Review::count();
+
+        $this->artisan('shop:seed --local --if-empty')->assertSuccessful();
+
+        $this->assertSame(1, Product::count());
+        $this->assertSame(2, Coupon::count());
+        $this->assertSame(6, Customer::count());
+        $this->assertSame($reviews, Review::count());
+    }
+
+    public function test_a_coupon_an_admin_deleted_does_not_come_back_on_restart(): void
+    {
+        $this->createProduct();
+        $this->artisan('shop:seed --local --if-empty')->assertSuccessful();
+        Coupon::where('code', 'MINUS20')->delete();
+
+        $this->artisan('shop:seed --local --if-empty')->assertSuccessful();
+
+        $this->assertSame(['WITAJ10'], Coupon::pluck('code')->all());
+    }
+
+    public function test_a_plain_run_restores_a_single_missing_coupon(): void
+    {
+        $this->seedShop();
+        Coupon::where('code', 'MINUS20')->delete();
+
+        $this->seedShop();
+
+        $this->assertSame(2, Coupon::count());
+    }
+
+    public function test_products_with_reviews_keep_them_when_others_are_filled(): void
+    {
+        $this->seedShop();
+        $reviewed = Product::query()->firstOrFail();
+        $before = Review::where('product_id', $reviewed->id)->pluck('id')->all();
+        Product::query()->whereKeyNot($reviewed->id)->limit(3)->get()->each(fn ($product) => $product->reviews()->delete());
+
+        $this->artisan('shop:seed --local')->assertSuccessful();
+
+        $this->assertSame($before, Review::where('product_id', $reviewed->id)->pluck('id')->all());
+    }
+
     public function test_seeding_twice_keeps_one_set_of_coupons_and_customers(): void
     {
         $this->seedShop();

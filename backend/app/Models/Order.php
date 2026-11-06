@@ -57,6 +57,7 @@ class Order extends Model
 
     protected $hidden = [
         'invoice_sequence',
+        'stock_deducted',
     ];
 
     protected $casts = [
@@ -69,6 +70,7 @@ class Order extends Model
         'delivery_price' => 'decimal:2',
         'order_date' => 'datetime',
         'paid_at' => 'datetime',
+        'stock_deducted' => 'boolean',
     ];
 
     protected $attributes = [

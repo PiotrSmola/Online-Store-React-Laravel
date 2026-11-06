@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 class SeedShopData extends Command
 {
     protected $signature = 'shop:seed
-                            {--if-empty : Pomiń seedowanie, jeśli w bazie są już produkty}
+                            {--if-empty : Uzupełnij tylko to, czego w bazie jeszcze nie ma}
                             {--local : Użyj tylko lokalnego pliku z danymi (bez zapytania do API)}';
 
     protected $description = 'Seed shop data from external API (falls back to database/data/products.json)';
@@ -46,69 +46,102 @@ class SeedShopData extends Command
         'Materiał przyjemny w dotyku.',
     ];
 
+    /**
+     * With --if-empty, which the container runs on every start, each group is filled only
+     * while it is empty, so a coupon or review an admin deleted does not come back. A plain
+     * run fills in whatever single coupon, customer or review is missing, and imports products.
+     */
     public function handle(ReviewService $reviews)
     {
-        if ($this->option('if-empty') && Product::exists()) {
-            $this->info('Produkty już istnieją w bazie - pomijam seedowanie.');
-            return 0;
-        }
+        $fillOnly = $this->option('if-empty');
 
         try {
-            $products = $this->loadProducts();
-
-            if ($products === null) {
-                $this->error('Nie udało się pobrać danych produktów (ani z API, ani z pliku lokalnego).');
+            if ($fillOnly && Product::exists()) {
+                $this->info('Produkty już istnieją w bazie - pomijam import produktów.');
+            } elseif (!$this->importProducts()) {
                 return 1;
             }
 
-            $this->info('Znaleziono ' . count($products) . ' produktów');
-
-            if (!Storage::disk('public')->exists('products')) {
-                Storage::disk('public')->makeDirectory('products');
+            if (!$fillOnly || !Coupon::exists()) {
+                $this->seedCoupons();
             }
 
-            $this->seedCoupons();
             $customers = $this->seedCustomers();
 
-            foreach ($products as $index => $productData) {
-                $this->info('Przetwarzanie produktu: ' . $productData['nazwa']);
-
-                $product = Product::create([
-                    'nazwa' => $productData['nazwa'],
-                    'kategoria' => $productData['kategoria'],
-                    'cena' => $productData['cena'],
-                    'sale_price' => $this->salePrice((float) $productData['cena'], $index),
-                    'opis' => $productData['opis'],
-                    'ocena' => $productData['ocena'],
-                    'rozmiar' => $productData['rozmiar'],
-                    'kolor' => $productData['kolor'],
-                    // Every fifth product, by position, so every run marks the same ones.
-                    'is_new' => $index % 5 === 1,
-                ]);
-
-                $imageName = 'zdj' . ($index + 1) . '.jpg';
-
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'image_path' => $imageName,
-                    'order' => 0,
-                ]);
-
-                $this->seedVariants($product, $index);
-                $this->seedReviews($product, $index, $customers);
-                $reviews->recalculate($product);
-
-                $this->line('✓ Utworzono produkt: ' . $product->nazwa);
+            if (!$fillOnly || !Review::exists()) {
+                $this->seedMissingReviews($customers, $reviews);
             }
-
-            $this->info('');
-            $this->info('Pomyślnie zaimportowano ' . count($products) . ' produktów!');
 
             return 0;
         } catch (\Exception $e) {
             $this->error('Błąd podczas importowania danych: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    private function importProducts(): bool
+    {
+        $products = $this->loadProducts();
+
+        if ($products === null) {
+            $this->error('Nie udało się pobrać danych produktów (ani z API, ani z pliku lokalnego).');
+            return false;
+        }
+
+        $this->info('Znaleziono ' . count($products) . ' produktów');
+
+        if (!Storage::disk('public')->exists('products')) {
+            Storage::disk('public')->makeDirectory('products');
+        }
+
+        foreach ($products as $index => $productData) {
+            $this->info('Przetwarzanie produktu: ' . $productData['nazwa']);
+
+            $product = Product::create([
+                'nazwa' => $productData['nazwa'],
+                'kategoria' => $productData['kategoria'],
+                'cena' => $productData['cena'],
+                'sale_price' => $this->salePrice((float) $productData['cena'], $index),
+                'opis' => $productData['opis'],
+                'ocena' => $productData['ocena'],
+                'rozmiar' => $productData['rozmiar'],
+                'kolor' => $productData['kolor'],
+                // Every fifth product, by position, so every run marks the same ones.
+                'is_new' => $index % 5 === 1,
+            ]);
+
+            $imageName = 'zdj' . ($index + 1) . '.jpg';
+
+            ProductImage::create([
+                'product_id' => $product->id,
+                'image_path' => $imageName,
+                'order' => 0,
+            ]);
+
+            $this->seedVariants($product, $index);
+
+            $this->line('✓ Utworzono produkt: ' . $product->nazwa);
+        }
+
+        $this->info('');
+        $this->info('Pomyślnie zaimportowano ' . count($products) . ' produktów!');
+
+        return true;
+    }
+
+    /** Products that already have reviews keep them; their position still counts. */
+    private function seedMissingReviews(array $customers, ReviewService $reviews): void
+    {
+        $position = 0;
+
+        Product::query()->lazyById()->each(function (Product $product) use (&$position, $customers, $reviews) {
+            $index = $position++;
+
+            if (!Review::query()->where('product_id', $product->id)->exists()) {
+                $this->seedReviews($product, $index, $customers);
+                $reviews->recalculate($product);
+            }
+        });
     }
 
     /** Every fourth product is 20% off, chosen by position so every run marks the same ones. */
