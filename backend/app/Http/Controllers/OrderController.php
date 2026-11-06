@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\CartPricing;
+use App\Services\InvoiceService;
 use App\Services\OrderService;
 use App\Support\PasswordAttempts;
 use App\Support\SafeExceptionContext;
@@ -357,6 +358,13 @@ class OrderController extends Controller
         }
 
         return response()->json($order);
+    }
+
+    public function invoice(Request $request, Order $order, InvoiceService $invoices)
+    {
+        $this->ensureOwner($request, $order);
+
+        return $invoices->download($order);
     }
 
     private function ensureOwner(Request $request, Order $order): void

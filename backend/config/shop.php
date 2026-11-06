@@ -25,4 +25,15 @@ return [
 
     'bank_account' => '12 3456 7890 1234 5678 9012 3456',
 
+    // Fictional details printed on invoices.
+    'seller' => [
+        'name' => 'Sklep Online sp. z o.o.',
+        'address' => 'ul. Przykładowa 1, 00-001 Warszawa',
+        'nip' => '525-000-00-00',
+        'bank_account' => '12 3456 7890 1234 5678 9012 3456',
+    ],
+
+    // Percent. Prices in the shop are gross.
+    'vat_rate' => 23,
+
 ];

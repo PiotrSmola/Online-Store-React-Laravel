@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\InvoiceService;
 use App\Services\OrderService;
 use App\Support\LikeSearch;
 use Illuminate\Database\Eloquent\Builder;
@@ -86,5 +87,10 @@ class OrderController extends Controller
     public function markPaid(Order $order)
     {
         return response()->json($this->orders->markPaid($order)->load([...Order::DETAILS, 'customer']));
+    }
+
+    public function invoice(Order $order, InvoiceService $invoices)
+    {
+        return $invoices->download($order);
     }
 }
