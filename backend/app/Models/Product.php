@@ -16,6 +16,7 @@ class Product extends Model
         'nazwa',
         'kategoria',
         'cena',
+        'sale_price',
         'opis',
         'ocena',
         'rozmiar',
@@ -27,10 +28,17 @@ class Product extends Model
         'is_active' => true,
     ];
 
+    protected $appends = [
+        'effective_price',
+        'is_on_sale',
+        'discount_percent',
+    ];
+
     protected $casts = [
         'rozmiar' => 'array',
         'kolor' => 'array',
         'cena' => 'decimal:2',
+        'sale_price' => 'decimal:2',
         'ocena' => 'decimal:1',
         'is_active' => 'boolean',
         'reviews_count' => 'integer',
@@ -75,6 +83,35 @@ class Product extends Model
     public function scopeWithStockTotal(Builder $query): Builder
     {
         return $query->withSum('variants as stock_total', 'stock');
+    }
+
+    /** What a buyer pays. Filters and sorts read the same value from the generated column. */
+    public function getEffectivePriceAttribute(): ?string
+    {
+        return $this->sale_price ?? $this->cena;
+    }
+
+    public function getIsOnSaleAttribute(): bool
+    {
+        return $this->sale_price !== null;
+    }
+
+    public function getDiscountPercentAttribute(): int
+    {
+        if ($this->sale_price === null) {
+            return 0;
+        }
+
+        return (int) round((1 - (float) $this->sale_price / (float) $this->cena) * 100);
+    }
+
+    // A row selected without its prices cannot say whether it is on sale, so it says nothing
+    // rather than answering "no" for an order line or a low stock row.
+    protected function getArrayableAppends()
+    {
+        return array_key_exists('cena', $this->attributes) && array_key_exists('sale_price', $this->attributes)
+            ? parent::getArrayableAppends()
+            : [];
     }
 
     // SUM is a string on MySQL, a number on sqlite and NULL when there are no variants.

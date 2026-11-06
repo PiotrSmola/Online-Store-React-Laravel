@@ -106,6 +106,7 @@ return [
         'q' => 'wyszukiwana fraza',
         'quantity' => 'ilość',
         'rating' => 'ocena',
+        'sale_price' => 'cena promocyjna',
         'size' => 'rozmiar',
         'sort' => 'sortowanie',
         'status' => 'status',

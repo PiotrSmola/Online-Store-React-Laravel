@@ -16,8 +16,8 @@ class CatalogService
     /** The only orderings a request can ask for. Keys are the accepted `sort` values. */
     public const SORTS = [
         'newest' => [['created_at', 'desc']],
-        'price_asc' => [['cena', 'asc']],
-        'price_desc' => [['cena', 'desc']],
+        'price_asc' => [['effective_price', 'asc']],
+        'price_desc' => [['effective_price', 'desc']],
         'name' => [['nazwa', 'asc']],
         'rating' => [['ocena', 'desc'], ['reviews_count', 'desc']],
     ];
@@ -25,7 +25,7 @@ class CatalogService
     private const DEFAULT_PER_PAGE = 12;
 
     /** Everything a product card needs. No description, no variant list. */
-    public const LIST_COLUMNS = ['id', 'nazwa', 'kategoria', 'cena', 'ocena', 'reviews_count', 'rozmiar', 'kolor'];
+    public const LIST_COLUMNS = ['id', 'nazwa', 'kategoria', 'cena', 'sale_price', 'ocena', 'reviews_count', 'rozmiar', 'kolor'];
 
     public const IMAGE_COLUMNS = 'images:id,product_id,image_path,order';
 
@@ -66,11 +66,15 @@ class CatalogService
         }
 
         if (isset($filters['min_price'])) {
-            $query->where('cena', '>=', $filters['min_price']);
+            $query->where('effective_price', '>=', $filters['min_price']);
         }
 
         if (isset($filters['max_price'])) {
-            $query->where('cena', '<=', $filters['max_price']);
+            $query->where('effective_price', '<=', $filters['max_price']);
+        }
+
+        if (!empty($filters['on_sale'])) {
+            $query->whereNotNull('sale_price');
         }
 
         $size = $filters['size'] ?? null;
@@ -124,7 +128,7 @@ class CatalogService
             ->when($category !== null, fn ($q) => $q->where('kategoria', $category));
 
         $price = (clone $products)->toBase()
-            ->select(DB::raw('min(cena) as min'), DB::raw('max(cena) as max'))
+            ->select(DB::raw('min(effective_price) as min'), DB::raw('max(effective_price) as max'))
             ->first();
 
         return [

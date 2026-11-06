@@ -77,6 +77,7 @@ class SeedShopData extends Command
                     'nazwa' => $productData['nazwa'],
                     'kategoria' => $productData['kategoria'],
                     'cena' => $productData['cena'],
+                    'sale_price' => $this->salePrice((float) $productData['cena'], $index),
                     'opis' => $productData['opis'],
                     'ocena' => $productData['ocena'],
                     'rozmiar' => $productData['rozmiar'],
@@ -106,6 +107,12 @@ class SeedShopData extends Command
             $this->error('Błąd podczas importowania danych: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    /** Every fourth product is 20% off, chosen by position so every run marks the same ones. */
+    private function salePrice(float $price, int $productIndex): ?float
+    {
+        return $productIndex % 4 === 2 ? round($price * 0.8, 2) : null;
     }
 
     private function seedVariants(Product $product, int $productIndex): void

@@ -91,6 +91,17 @@ class VariantBackfillTest extends TestCase
         $this->assertSame(10, Product::whereKey($id)->withStockTotal()->sole()->stock_total);
     }
 
+    public function test_existing_products_get_their_regular_price_as_the_effective_price(): void
+    {
+        $id = $this->oldProduct(['S'], ['Czarny']);
+
+        Artisan::call('migrate');
+
+        $row = DB::table('products')->where('id', $id)->first();
+        $this->assertNull($row->sale_price);
+        $this->assertEquals(10, $row->effective_price);
+    }
+
     public function test_the_variant_unique_index_refuses_a_duplicate(): void
     {
         $id = $this->oldProduct(['S'], ['Czarny']);

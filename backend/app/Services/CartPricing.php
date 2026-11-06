@@ -118,7 +118,7 @@ class CartPricing
     {
         $variant = $variants->first(fn (ProductVariant $variant) => $variant->size === $item['size'] && $variant->color === $item['color']);
         $stock = $variant?->stock ?? 0;
-        $unitPrice = $product ? $this->grosze($product->cena) : 0;
+        $unitPrice = $product ? $this->grosze($product->effective_price) : 0;
         $error = $this->lineError($item, $product, $variant);
 
         return [

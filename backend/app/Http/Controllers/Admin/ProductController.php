@@ -45,14 +45,14 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $this->validated($request, isUpdate: false);
+        $validated = $this->validated($request);
 
         return response()->json($this->withDetails($this->products->create($validated)->refresh()), 201);
     }
 
     public function update(Request $request, Product $product)
     {
-        $validated = $this->validated($request, isUpdate: true);
+        $validated = $this->validated($request, $product);
 
         return response()->json($this->withDetails($this->products->update($product, $validated)));
     }
@@ -69,14 +69,15 @@ class ProductController extends Controller
         ]);
     }
 
-    private function validated(Request $request, bool $isUpdate): array
+    private function validated(Request $request, ?Product $product = null): array
     {
-        $required = $isUpdate ? 'sometimes|required' : 'required';
+        $required = $product ? 'sometimes|required' : 'required';
 
         $validated = $request->validate([
             'nazwa' => "{$required}|string|max:255",
             'kategoria' => "{$required}|string|max:255",
             'cena' => "{$required}|numeric|min:0|max:99999999.99",
+            'sale_price' => 'sometimes|nullable|numeric|min:0.01|max:99999999.99',
             'opis' => "{$required}|string|max:20000",
             'is_active' => 'sometimes|boolean',
             'variants' => "{$required}|array|min:1|max:500",
@@ -86,8 +87,23 @@ class ProductController extends Controller
         ]);
 
         $this->rejectDuplicates($validated['variants'] ?? []);
+        $this->rejectSaleAboveRegularPrice($validated, $product);
 
         return $validated;
+    }
+
+    // Checked against the prices the product will have afterwards, so lowering cena
+    // alone cannot leave an older sale_price above it.
+    private function rejectSaleAboveRegularPrice(array $validated, ?Product $product): void
+    {
+        $price = $validated['cena'] ?? $product?->cena;
+        $sale = array_key_exists('sale_price', $validated) ? $validated['sale_price'] : $product?->sale_price;
+
+        if ($sale !== null && round((float) $sale, 2) >= round((float) $price, 2)) {
+            throw ValidationException::withMessages([
+                'sale_price' => ['Cena promocyjna musi być niższa od ceny regularnej.'],
+            ]);
+        }
     }
 
     // Compared without case because MySQL's unique index would treat these as one row.
