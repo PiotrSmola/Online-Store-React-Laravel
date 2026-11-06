@@ -267,7 +267,7 @@ This project is released under the GNU General Public License v3.0. See [LICENSE
 
 ## Interface Preview
 
-Screenshots of the running application with demo data. Names, addresses and orders are fictional, and the interface is in Polish.
+Screenshots of the running application with test data, so some names and entries are development leftovers. All of them are fictional, and the interface is in Polish.
 
 ### Shop
 
@@ -289,8 +289,30 @@ Screenshots of the running application with demo data. Names, addresses and orde
 |---------------------------|----------|
 | ![Paid order with its status history](docs/screenshots/07-order.jpg) | ![Wishlist](docs/screenshots/08-wishlist.jpg) |
 
+| Account | Contact |
+|---------|---------|
+| ![Customer account page](docs/screenshots/12-account.jpg) | ![Contact form](docs/screenshots/13-contact.jpg) |
+
+### Admin panel
+
+| Overview | Products |
+|----------|----------|
+| ![Admin overview with sales and low stock](docs/screenshots/14-admin-overview.jpg) | ![Admin product list](docs/screenshots/15-admin-products.jpg) |
+
+| Product form | Orders |
+|--------------|--------|
+| ![Product form with variants and photos](docs/screenshots/16-admin-product-form.jpg) | ![Admin order list](docs/screenshots/17-admin-orders.jpg) |
+
+| Order details | Customers |
+|---------------|-----------|
+| ![Admin order details with status actions](docs/screenshots/18-admin-order.jpg) | ![Customer list](docs/screenshots/19-admin-customers.jpg) |
+
+| Coupons | Messages |
+|---------|----------|
+| ![Coupon list](docs/screenshots/20-admin-coupons.jpg) | ![Contact messages](docs/screenshots/21-admin-messages.jpg) |
+
 ### Mobile
 
-| Home | Product | Checkout |
-|------|---------|----------|
-| <img src="docs/screenshots/09-mobile-home.jpg" alt="Home page on a phone" width="220"> | <img src="docs/screenshots/10-mobile-product.jpg" alt="Product page on a phone" width="220"> | <img src="docs/screenshots/11-mobile-checkout.jpg" alt="Checkout on a phone" width="220"> |
+| Home | Product | Checkout | Admin |
+|------|---------|----------|-------|
+| <img src="docs/screenshots/09-mobile-home.jpg" alt="Home page on a phone" width="200"> | <img src="docs/screenshots/10-mobile-product.jpg" alt="Product page on a phone" width="200"> | <img src="docs/screenshots/11-mobile-checkout.jpg" alt="Checkout on a phone" width="200"> | <img src="docs/screenshots/22-mobile-admin.jpg" alt="Admin order list on a phone" width="200"> |
