@@ -185,7 +185,7 @@ fi
 
 printf '\n\033[32mOnline Store is up and running!\033[0m\n'
 echo "  Shop:   $SHOP_URL"
-echo "  API:    http://localhost:$BACKEND_PORT/api/products"
+echo "  API:    http://127.0.0.1:$BACKEND_PORT/api/products"
 echo "  MySQL:  127.0.0.1:$DB_FORWARD_PORT  (db: $DB_DATABASE, user: $DB_USERNAME, password in .env)"
 echo
 echo "Useful commands:"

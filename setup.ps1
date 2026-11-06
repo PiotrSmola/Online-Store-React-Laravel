@@ -205,7 +205,7 @@ if (-not $ready) {
 Write-Host ''
 Write-Host 'Online Store is up and running!' -ForegroundColor Green
 Write-Host "  Shop:   $shopUrl"
-Write-Host "  API:    http://localhost:$backendPortFree/api/products"
+Write-Host "  API:    http://127.0.0.1:$backendPortFree/api/products"
 Write-Host "  MySQL:  127.0.0.1:$dbPortFree  (db: $dbName, user: $dbUser, password in .env)"
 Write-Host ''
 Write-Host 'Useful commands:'
