@@ -36,4 +36,10 @@ return [
     // Percent. Prices in the shop are gross.
     'vat_rate' => 23,
 
+    // Read by `php artisan shop:admin`. There is no default password on purpose.
+    'admin' => [
+        'email' => env('ADMIN_EMAIL'),
+        'password' => env('ADMIN_PASSWORD'),
+    ],
+
 ];

@@ -2,11 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Coupon;
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\Review;
+use App\Services\ReviewService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class SeedShopData extends Command
 {
@@ -18,7 +23,30 @@ class SeedShopData extends Command
 
     private const API_URL = 'https://run.mocky.io/v3/d175ce87-f8d2-4df3-84e8-c1342af1bf54';
 
-    public function handle()
+    /** Walked by product and variant position, so every run gives the same stock. */
+    private const STOCK_PATTERN = [12, 8, 0, 15, 5, 2, 20, 9, 1, 6, 14, 0, 7, 11, 2, 18];
+
+    private const DEMO_CUSTOMERS = [
+        ['Anna', 'Kowalska'],
+        ['Piotr', 'Nowak'],
+        ['Maria', 'Wiśniewska'],
+        ['Tomasz', 'Wójcik'],
+        ['Katarzyna', 'Lewandowska'],
+        ['Michał', 'Zieliński'],
+    ];
+
+    private const REVIEW_COMMENTS = [
+        'Bardzo dobra jakość, polecam.',
+        'Zgodne z opisem, szybka dostawa.',
+        'Świetnie wygląda i dobrze leży.',
+        'Solidne wykonanie, warte swojej ceny.',
+        'Jestem zadowolona z zakupu.',
+        'Dobry produkt, choć dostawa trwała dłużej.',
+        'Kupiłem drugi raz i nadal polecam.',
+        'Materiał przyjemny w dotyku.',
+    ];
+
+    public function handle(ReviewService $reviews)
     {
         if ($this->option('if-empty') && Product::exists()) {
             $this->info('Produkty już istnieją w bazie - pomijam seedowanie.');
@@ -38,6 +66,9 @@ class SeedShopData extends Command
             if (!Storage::disk('public')->exists('products')) {
                 Storage::disk('public')->makeDirectory('products');
             }
+
+            $this->seedCoupons();
+            $customers = $this->seedCustomers();
 
             foreach ($products as $index => $productData) {
                 $this->info('Przetwarzanie produktu: ' . $productData['nazwa']);
@@ -60,6 +91,10 @@ class SeedShopData extends Command
                     'order' => 0,
                 ]);
 
+                $this->seedVariants($product, $index);
+                $this->seedReviews($product, $index, $customers);
+                $reviews->recalculate($product);
+
                 $this->line('✓ Utworzono produkt: ' . $product->nazwa);
             }
 
@@ -71,6 +106,52 @@ class SeedShopData extends Command
             $this->error('Błąd podczas importowania danych: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    private function seedVariants(Product $product, int $productIndex): void
+    {
+        foreach ($product->optionCombinations() as $variantIndex => $combination) {
+            $position = ($productIndex * 3 + $variantIndex) % count(self::STOCK_PATTERN);
+
+            $product->variants()->forceCreate($combination + ['stock' => self::STOCK_PATTERN[$position]]);
+        }
+    }
+
+    /** One to three reviews, chosen by position so every run writes the same ones. */
+    private function seedReviews(Product $product, int $productIndex, array $customers): void
+    {
+        $count = $productIndex % 3 + 1;
+
+        for ($i = 0; $i < $count; $i++) {
+            Review::create([
+                'product_id' => $product->id,
+                'customer_id' => $customers[($productIndex + $i) % count($customers)]->id,
+                'rating' => max(1, min(5, (int) round((float) $product->ocena) - ($productIndex + $i) % 2)),
+                'comment' => self::REVIEW_COMMENTS[($productIndex * 2 + $i) % count(self::REVIEW_COMMENTS)],
+            ]);
+        }
+    }
+
+    private function seedCoupons(): void
+    {
+        Coupon::firstOrCreate(['code' => 'WITAJ10'], ['type' => 'percent', 'value' => 10]);
+        Coupon::firstOrCreate(['code' => 'MINUS20'], ['type' => 'fixed', 'value' => 20, 'min_order' => 150]);
+    }
+
+    /** @return list<Customer> */
+    private function seedCustomers(): array
+    {
+        $customers = [];
+
+        foreach (self::DEMO_CUSTOMERS as $index => [$firstName, $lastName]) {
+            // Nobody signs in to these accounts, so the password is random and never shown.
+            $customers[] = Customer::firstOrCreate(
+                ['email' => 'demo' . ($index + 1) . '@example.com'],
+                ['password' => Str::password(32), 'first_name' => $firstName, 'last_name' => $lastName]
+            );
+        }
+
+        return $customers;
     }
 
     private function loadProducts(): ?array
