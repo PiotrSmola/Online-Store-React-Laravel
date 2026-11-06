@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\PasswordAttempts;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -23,9 +24,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $tooManyAttempts = fn (Request $request, array $headers) => response()->json([
-            'message' => 'Zbyt wiele prób. Spróbuj ponownie za chwilę.',
-        ], 429, $headers);
+        $tooManyAttempts = fn (Request $request, array $headers) => PasswordAttempts::tooManyResponse($headers);
 
         RateLimiter::for('login', function (Request $request) use ($tooManyAttempts) {
             // The limiter runs before validation, so email can still be anything here.

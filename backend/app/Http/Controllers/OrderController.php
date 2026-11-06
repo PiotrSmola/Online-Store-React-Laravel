@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Support\PasswordAttempts;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -203,12 +204,12 @@ class OrderController extends Controller
         $bucket = md5('login' . $limit->key); // The name throttle:login gives its bucket.
 
         if (RateLimiter::tooManyAttempts($bucket, $limit->maxAttempts)) {
-            throw new HttpResponseException(($limit->responseCallback)($request, [
+            throw new HttpResponseException(PasswordAttempts::tooManyResponse([
                 'Retry-After' => RateLimiter::availableIn($bucket),
             ]));
         }
 
-        if (Hash::check($request->password, $customer->password)) {
+        if (PasswordAttempts::verify($request, $customer)) {
             return true;
         }
 

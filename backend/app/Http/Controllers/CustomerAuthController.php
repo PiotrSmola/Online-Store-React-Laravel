@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Support\PasswordAttempts;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -19,7 +19,7 @@ class CustomerAuthController extends Controller
 
         $customer = Customer::where('email', $request->email)->first();
 
-        if (!$customer || !Hash::check($request->password, $customer->password)) {
+        if (!$customer || !PasswordAttempts::verify($request, $customer)) {
             return response()->json([
                 'message' => 'Podane dane logowania są nieprawidłowe.',
                 'errors' => [
