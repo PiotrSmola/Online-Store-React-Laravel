@@ -9,12 +9,11 @@ use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProductVariant;
-use App\Support\SafeExceptionContext;
+use App\Support\QueuedMail;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class OrderService
@@ -237,17 +236,10 @@ class OrderService
         return $order;
     }
 
-    // After the commit, so a rolled back order sends nothing. A mail problem must not
-    // turn an order that is already saved into an error for the customer.
+    // After the commit, so a rolled back order sends nothing.
     private function queueMail(Order $order, Mailable $mail): void
     {
-        DB::afterCommit(function () use ($order, $mail) {
-            try {
-                Mail::to($order->customer->email)->queue($mail);
-            } catch (\Throwable $e) {
-                Log::error('Order email could not be queued', ['order_id' => $order->id] + SafeExceptionContext::of($e));
-            }
-        });
+        DB::afterCommit(fn () => QueuedMail::send($order->customer->email, $mail, ['order_id' => $order->id]));
     }
 
     // The WHERE repeats the check the lock already made, so stock cannot go below zero

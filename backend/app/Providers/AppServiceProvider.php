@@ -52,7 +52,15 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Each is counted per address: these routes have no account to key on yet.
-        foreach (['register' => 5, 'forgot-password' => 5, 'reset-password' => 10] as $name => $perMinute) {
+        $perIpLimits = [
+            'register' => 5,
+            'forgot-password' => 5,
+            'reset-password' => 10,
+            'newsletter' => 5,
+            'newsletter-token' => 10,
+        ];
+
+        foreach ($perIpLimits as $name => $perMinute) {
             RateLimiter::for($name, fn (Request $request) => Limit::perMinute($perMinute)
                 ->by($request->ip())
                 ->response($tooManyAttempts));

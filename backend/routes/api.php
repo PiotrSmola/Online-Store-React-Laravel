@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\CustomerController as AdminCustomerController;
+use App\Http\Controllers\Admin\NewsletterController as AdminNewsletterController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Admin\ProductImageController as AdminProductImageController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\CustomerAccountController;
 use App\Http\Controllers\CustomerAuthController;
+use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReviewController;
@@ -30,6 +32,10 @@ Route::post('/customer/forgot-password', [CustomerAuthController::class, 'forgot
 Route::post('/customer/reset-password', [CustomerAuthController::class, 'resetPassword'])->middleware('throttle:reset-password');
 
 Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:orders');
+
+Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])->middleware('throttle:newsletter');
+Route::post('/newsletter/confirm', [NewsletterController::class, 'confirm'])->middleware('throttle:newsletter-token');
+Route::post('/newsletter/unsubscribe', [NewsletterController::class, 'unsubscribe'])->middleware('throttle:newsletter-token');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/customer/logout', [CustomerAuthController::class, 'logout']);
@@ -79,4 +85,7 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     Route::delete('/coupons/{coupon}', [AdminCouponController::class, 'destroy']);
 
     Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy']);
+
+    Route::get('/newsletter', [AdminNewsletterController::class, 'index']);
+    Route::get('/newsletter/export', [AdminNewsletterController::class, 'export']);
 });

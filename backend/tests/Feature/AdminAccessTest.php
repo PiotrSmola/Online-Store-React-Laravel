@@ -38,7 +38,7 @@ class AdminAccessTest extends TestCase
 
     public function test_the_list_of_admin_routes_is_complete(): void
     {
-        $this->assertCount(20, $this->adminRoutes());
+        $this->assertCount(22, $this->adminRoutes());
     }
 
     public function test_every_admin_route_carries_both_middlewares(): void
