@@ -131,6 +131,9 @@ if ($dbVolumeExists -and -not $existing.ContainsKey('DB_PASSWORD')) {
     $dbPassword = Get-Setting 'DB_PASSWORD' { New-RandomString }
     $dbRootPassword = Get-Setting 'DB_ROOT_PASSWORD' { New-RandomString }
 }
+$dockerSubnet = Get-Setting 'DOCKER_SUBNET' { $defaults['DOCKER_SUBNET'] }
+$frontendIp = Get-Setting 'FRONTEND_IP' { $defaults['FRONTEND_IP'] }
+$appDebug = Get-Setting 'APP_DEBUG' { $defaults['APP_DEBUG'] }
 
 # --- 4. Free ports ----------------------------------------------------------
 Write-Step 'Looking for free ports...'
@@ -156,7 +159,11 @@ APP_PORT=$appPortFree
 BACKEND_PORT=$backendPortFree
 DB_FORWARD_PORT=$dbPortFree
 
+DOCKER_SUBNET=$dockerSubnet
+FRONTEND_IP=$frontendIp
+
 APP_KEY=$appKey
+APP_DEBUG=$appDebug
 
 DB_DATABASE=$dbName
 DB_USERNAME=$dbUser
@@ -198,7 +205,7 @@ if (-not $ready) {
 Write-Host ''
 Write-Host 'Online Store is up and running!' -ForegroundColor Green
 Write-Host "  Shop:   $shopUrl"
-Write-Host "  API:    http://localhost:$backendPortFree/api/products"
+Write-Host "  API:    http://127.0.0.1:$backendPortFree/api/products"
 Write-Host "  MySQL:  127.0.0.1:$dbPortFree  (db: $dbName, user: $dbUser, password in .env)"
 Write-Host ''
 Write-Host 'Useful commands:'

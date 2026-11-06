@@ -5,23 +5,30 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use App\Support\PasswordAttempts;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    private const ACCOUNT_EXISTS_MESSAGE = 'Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.';
+
     public function store(Request $request)
     {
-        Log::info('Otrzymane dane zamówienia:', $request->all());
-
         try {
-            $validatedData = $request->validate([
+            $authenticatedCustomer = $request->user('sanctum');
+
+            $request->validate([
                 'customer_type' => 'required|in:individual,company',
-                'email' => 'required|email',
-                'password' => 'nullable|min:6',
+                'email' => $authenticatedCustomer ? 'nullable' : 'required|email',
+                'password' => 'nullable|string',
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'required|string|max:255',
                 'phone' => 'required|string|max:20',
@@ -32,101 +39,61 @@ class OrderController extends Controller
                 'company_name' => 'nullable|string|max:255',
                 'nip' => 'nullable|string|max:20',
                 'payment_method' => 'required|in:card,transfer,cash',
-                'delivery_method' => 'required|in:courier,pickup_point,store_pickup',
-                'delivery_price' => 'required|numeric|min:0',
-                'total_with_delivery' => 'required|numeric|min:0',
+                'delivery_method' => ['required', Rule::in(array_keys(config('shop.delivery_prices')))],
                 'cart_items' => 'required|array|min:1',
-                'cart_items.*.product_id' => 'required|exists:products,id',
-                'cart_items.*.quantity' => 'required|integer|min:1',
+                'cart_items.*.product_id' => 'required|integer|exists:products,id',
+                'cart_items.*.quantity' => 'required|integer|min:1|max:99',
                 'cart_items.*.selected_size' => 'nullable|string',
                 'cart_items.*.selected_color' => 'nullable|string',
                 'payment' => 'required|array',
-                'payment.card_number' => 'required_if:payment_method,card|string',
-                'payment.card_name' => 'required_if:payment_method,card|string|max:255',
-                'payment.expiry_date' => 'required_if:payment_method,card|string',
-                'payment.cvv' => 'required_if:payment_method,card|string',
+                'payment.card_number' => 'required_if:payment_method,card|nullable|string',
+                'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
+                'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
+                'payment.cvv' => 'required_if:payment_method,card|nullable|string',
+            ], [
+                'cart_items.*.quantity.max' => 'Maksymalna ilość jednego produktu to 99',
             ]);
 
             if ($request->payment_method === 'card') {
                 $this->validateCardPayment($request->payment);
             }
 
-            Log::info('Dane po walidacji:', $validatedData);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Błędy walidacji:', $e->errors());
-            return response()->json([
-                'message' => 'Błędy walidacji',
-                'errors' => $e->errors()
-            ], 422);
-        }
+            $customer = $authenticatedCustomer ?? $this->findCustomerForGuest($request);
+            $orderItems = $this->buildOrderItems($request->cart_items);
 
-        return DB::transaction(function () use ($request) {
-            try {
-                $customer = Customer::where('email', $request->email)->first();
+            // Failure paths must throw: a response returned from this closure would commit.
+            return DB::transaction(function () use ($request, $customer, $authenticatedCustomer, $orderItems) {
+                $customerData = [
+                    'first_name' => $request->first_name,
+                    'last_name' => $request->last_name,
+                    'phone' => $request->phone,
+                    'company_name' => $request->company_name,
+                    'nip' => $request->nip,
+                    'address' => $request->address,
+                    'city' => $request->city,
+                    'postal_code' => $request->postal_code,
+                    'country' => $request->country,
+                    'customer_type' => $request->customer_type,
+                ];
 
-                if (!$customer) {
-                    if (!$request->password) {
-                        return response()->json([
-                            'message' => 'Hasło jest wymagane dla nowego klienta',
-                            'errors' => ['password' => ['Hasło jest wymagane']]
-                        ], 422);
-                    }
-
-                    $customer = Customer::create([
-                        'email' => $request->email,
-                        'password' => Hash::make($request->password),
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'phone' => $request->phone,
-                        'company_name' => $request->company_name,
-                        'nip' => $request->nip,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                        'customer_type' => $request->customer_type,
-                    ]);
-
-                    Log::info('Utworzono nowego klienta:', ['id' => $customer->id]);
+                if ($customer) {
+                    $customer->update($customerData);
                 } else {
-                    $customer->update([
-                        'first_name' => $request->first_name,
-                        'last_name' => $request->last_name,
-                        'phone' => $request->phone,
-                        'company_name' => $request->company_name,
-                        'nip' => $request->nip,
-                        'address' => $request->address,
-                        'city' => $request->city,
-                        'postal_code' => $request->postal_code,
-                        'country' => $request->country,
-                        'customer_type' => $request->customer_type,
-                    ]);
-                }
-
-                $totalAmount = 0;
-                $orderItems = [];
-
-                foreach ($request->cart_items as $item) {
-                    $product = Product::find($item['product_id']);
-                    if (!$product) {
-                        throw new \Exception("Produkt o ID {$item['product_id']} nie istnieje");
+                    try {
+                        $customer = Customer::create($customerData + [
+                            'email' => $request->email,
+                            'password' => Hash::make($request->password),
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Another request registered the address after the lookup, or the
+                        // unique index treats it as equal to one the lookup did not match.
+                        throw ValidationException::withMessages(['email' => [self::ACCOUNT_EXISTS_MESSAGE]]);
                     }
-
-                    $itemTotal = $product->cena * $item['quantity'];
-                    $totalAmount += $itemTotal;
-
-                    $orderItems[] = [
-                        'product_id' => $product->id,
-                        'quantity' => $item['quantity'],
-                        'price' => $product->cena,
-                        'selected_size' => $item['selected_size'] ?? null,
-                        'selected_color' => $item['selected_color'] ?? null,
-                    ];
                 }
 
-                $totalAmount += $request->delivery_price;
-
-                Log::info('Obliczono pozycje zamówienia:', $orderItems);
+                $itemsTotal = array_sum(array_map(fn ($item) => $item['price'] * $item['quantity'], $orderItems));
+                $deliveryPrice = config('shop.delivery_prices')[$request->delivery_method];
+                $totalAmount = round($itemsTotal + $deliveryPrice, 2);
 
                 $paymentDetails = [
                     'method' => $request->payment_method,
@@ -148,7 +115,7 @@ class OrderController extends Controller
                     'status' => 'pending',
                     'payment_method' => $request->payment_method,
                     'delivery_method' => $request->delivery_method,
-                    'delivery_price' => $request->delivery_price,
+                    'delivery_price' => $deliveryPrice,
                     'billing_address' => [
                         'first_name' => $request->first_name,
                         'last_name' => $request->last_name,
@@ -171,33 +138,166 @@ class OrderController extends Controller
                     'order_date' => now(),
                 ]);
 
-                Log::info('Utworzono zamówienie:', ['id' => $order->id]);
+                Log::info('Order created', ['order_id' => $order->id]);
 
                 foreach ($orderItems as $item) {
                     $order->items()->create($item);
                 }
 
-                $token = $customer->createToken('customer-token')->plainTextToken;
-
-                Log::info('Zamówienie zakończone pomyślnie');
-
-                return response()->json([
+                $response = [
                     'order' => $order->load('items.product.images'),
                     'customer' => $customer,
-                    'token' => $token,
                     'message' => 'Zamówienie zostało złożone pomyślnie!'
-                ]);
-            } catch (\Exception $e) {
-                Log::error('Błąd podczas tworzenia zamówienia:', [
-                    'message' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
+                ];
 
-                return response()->json([
-                    'message' => 'Błąd podczas tworzenia zamówienia: ' . $e->getMessage()
-                ], 500);
+                // A request that came with a token already has one; new tokens are only
+                // for accounts created here or proven by the correct password.
+                if (!$authenticatedCustomer) {
+                    $response['token'] = $customer->createToken('customer-token')->plainTextToken;
+                }
+
+                return response()->json($response);
+            });
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => 'Błędy walidacji',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
+        } catch (\Throwable $e) {
+            Log::error('Order creation failed', $this->safeExceptionContext($e));
+
+            return response()->json([
+                'message' => 'Nie udało się złożyć zamówienia. Spróbuj ponownie później.'
+            ], 500);
+        }
+    }
+
+    // For a request without a token: the existing account if the password proves ownership,
+    // null if the email is free and a new account may be created.
+    private function findCustomerForGuest(Request $request): ?Customer
+    {
+        $customer = Customer::where('email', $request->email)->first();
+
+        if ($customer) {
+            if ($request->password === null || !$this->passwordMatches($request, $customer)) {
+                throw ValidationException::withMessages(['email' => [self::ACCOUNT_EXISTS_MESSAGE]]);
             }
-        });
+
+            return $customer;
+        }
+
+        if ($request->password === null) {
+            throw ValidationException::withMessages([
+                'password' => ['Hasło jest wymagane'],
+            ]);
+        }
+
+        if (mb_strlen($request->password) < 6) {
+            throw ValidationException::withMessages([
+                'password' => ['Hasło musi mieć minimum 6 znaków'],
+            ]);
+        }
+
+        return null;
+    }
+
+    // Every failed password check spends the budget of the login route, so this endpoint
+    // cannot be used to guess more passwords than login allows.
+    private function passwordMatches(Request $request, Customer $customer): bool
+    {
+        $limit = RateLimiter::limiter('login')($request);
+        $bucket = md5('login' . $limit->key); // The name throttle:login gives its bucket.
+
+        if (RateLimiter::tooManyAttempts($bucket, $limit->maxAttempts)) {
+            throw new HttpResponseException(PasswordAttempts::tooManyResponse([
+                'Retry-After' => RateLimiter::availableIn($bucket),
+            ]));
+        }
+
+        if (PasswordAttempts::verify($request, $customer)) {
+            return true;
+        }
+
+        RateLimiter::hit($bucket, $limit->decaySeconds);
+
+        return false;
+    }
+
+    private function buildOrderItems(array $cartItems): array
+    {
+        $orderItems = [];
+        $errors = [];
+
+        foreach ($cartItems as $index => $item) {
+            $product = Product::findOrFail($item['product_id']);
+            $selectedSize = $item['selected_size'] ?? null;
+            $selectedColor = $item['selected_color'] ?? null;
+
+            if ($error = $this->optionError($product, 'rozmiar', $product->rozmiar, $selectedSize)) {
+                $errors["cart_items.{$index}.selected_size"] = [$error];
+            }
+
+            if ($error = $this->optionError($product, 'kolor', $product->kolor, $selectedColor)) {
+                $errors["cart_items.{$index}.selected_color"] = [$error];
+            }
+
+            $orderItems[] = [
+                'product_id' => $product->id,
+                'quantity' => $item['quantity'],
+                'price' => $product->cena,
+                'selected_size' => blank($selectedSize) ? null : $selectedSize,
+                'selected_color' => blank($selectedColor) ? null : $selectedColor,
+            ];
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $orderItems;
+    }
+
+    // $offered is the product's JSON column, which can be null or an empty list.
+    private function optionError(Product $product, string $label, mixed $offered, ?string $selected): ?string
+    {
+        $options = array_filter(
+            array_map(fn ($option) => trim((string) $option), (array) $offered),
+            fn ($option) => $option !== ''
+        );
+
+        if ($options === []) {
+            return blank($selected) ? null : "Produkt „{$product->nazwa}” nie ma opcji: {$label}";
+        }
+
+        if (blank($selected)) {
+            return "Wybierz {$label} produktu „{$product->nazwa}”";
+        }
+
+        return in_array($selected, $options, true)
+            ? null
+            : "Wybrany {$label} produktu „{$product->nazwa}” jest niedostępny";
+    }
+
+    // Exception messages can embed SQL bindings (emails, password hashes) and trace
+    // strings embed call arguments, so only the type and code locations are logged.
+    private function safeExceptionContext(\Throwable $e): array
+    {
+        $appFrames = [];
+
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['file']) && !str_contains($frame['file'], DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) {
+                $appFrames[] = $frame['file'] . ':' . ($frame['line'] ?? '?');
+            }
+        }
+
+        return [
+            'exception_class' => $e::class,
+            'code' => $e->getCode(),
+            'location' => $e->getFile() . ':' . $e->getLine(),
+            'app_frames' => array_slice($appFrames, 0, 10),
+        ];
     }
 
     // Walidacja płatności kartą (algorytm Luhn)
@@ -239,10 +339,7 @@ class OrderController extends Controller
         }
 
         if (!empty($errors)) {
-            throw new \Illuminate\Validation\ValidationException(
-                validator([], []),
-                response()->json(['errors' => $errors], 422)
-            );
+            throw ValidationException::withMessages($errors);
         }
     }
 

@@ -1,13 +1,23 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useShop } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
 export default function CategoryProducts() {
   const { category } = useParams();
-  const { addToCart } = useShop();
+  const { addToCart, productHasOptions } = useShop();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // A product with a size or color can only be ordered after choosing one.
+  const handleBuyNow = (product) => {
+    if (productHasOptions(product)) {
+      navigate(`/product/${product.id}`);
+    } else {
+      addToCart(product);
+    }
+  };
 
   useEffect(() => {
     fetchCategoryProducts();
@@ -72,7 +82,7 @@ export default function CategoryProducts() {
                 <div className="w3-display-middle w3-display-hover">
                   <button 
                     className="w3-button w3-black"
-                    onClick={() => addToCart(product)}
+                    onClick={() => handleBuyNow(product)}
                   >
                     Kup teraz <i className="fa fa-shopping-cart"></i>
                   </button>

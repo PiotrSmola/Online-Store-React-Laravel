@@ -113,6 +113,9 @@ if [ -z "$DB_PASSWORD" ] && docker volume inspect "${PROJECT_NAME}_db_data" >/de
 fi
 [ -n "$DB_PASSWORD" ] || DB_PASSWORD="$(random_string 24)"
 [ -n "$DB_ROOT_PASSWORD" ] || DB_ROOT_PASSWORD="$(random_string 24)"
+DOCKER_SUBNET="$(env_get "$ENV_FILE" DOCKER_SUBNET)"; [ -n "$DOCKER_SUBNET" ] || DOCKER_SUBNET="$(env_get "$EXAMPLE" DOCKER_SUBNET)"
+FRONTEND_IP="$(env_get "$ENV_FILE" FRONTEND_IP)";     [ -n "$FRONTEND_IP" ] || FRONTEND_IP="$(env_get "$EXAMPLE" FRONTEND_IP)"
+APP_DEBUG="$(env_get "$ENV_FILE" APP_DEBUG)";         [ -n "$APP_DEBUG" ] || APP_DEBUG="$(env_get "$EXAMPLE" APP_DEBUG)"
 
 # --- 4. Free ports ------------------------------------------------------------
 step "Looking for free ports..."
@@ -138,7 +141,11 @@ APP_PORT=$APP_PORT
 BACKEND_PORT=$BACKEND_PORT
 DB_FORWARD_PORT=$DB_FORWARD_PORT
 
+DOCKER_SUBNET=$DOCKER_SUBNET
+FRONTEND_IP=$FRONTEND_IP
+
 APP_KEY=$APP_KEY
+APP_DEBUG=$APP_DEBUG
 
 DB_DATABASE=$DB_DATABASE
 DB_USERNAME=$DB_USERNAME
@@ -178,7 +185,7 @@ fi
 
 printf '\n\033[32mOnline Store is up and running!\033[0m\n'
 echo "  Shop:   $SHOP_URL"
-echo "  API:    http://localhost:$BACKEND_PORT/api/products"
+echo "  API:    http://127.0.0.1:$BACKEND_PORT/api/products"
 echo "  MySQL:  127.0.0.1:$DB_FORWARD_PORT  (db: $DB_DATABASE, user: $DB_USERNAME, password in .env)"
 echo
 echo "Useful commands:"
