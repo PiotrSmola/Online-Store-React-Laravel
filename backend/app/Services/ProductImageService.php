@@ -17,8 +17,11 @@ class ProductImageService
 
     private const THUMBNAIL_WIDTH = 640;
 
-    /** Above this a decoded image no longer fits the workers' memory. */
-    private const MAX_PIXELS = 40_000_000;
+    /**
+     * Refused outright, however much memory is free. The catalog's own photos reach 49 MP,
+     * and at this ceiling a decoded image still fits the 512 MB the containers run with.
+     */
+    private const MAX_PIXELS = 64_000_000;
 
     /** Rough cost of one decoded pixel in GD: four bytes plus line overhead. */
     private const BYTES_PER_PIXEL = 5;

@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Log;
@@ -62,6 +63,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (MethodNotAllowedHttpException $e, Request $request) => $request->is('api/*')
             ? response()->json(['message' => 'Niedozwolona metoda'], 405)
+            : null);
+
+        $exceptions->render(fn (PostTooLargeException $e, Request $request) => $request->is('api/*')
+            ? response()->json(['message' => 'Przesłane dane są zbyt duże.'], 413)
             : null);
 
         $exceptions->render(function (\Throwable $e, Request $request) {

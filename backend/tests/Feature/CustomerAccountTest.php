@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Notifications\CustomerResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -435,6 +436,14 @@ class CustomerAccountTest extends TestCase
         $this->assertSame(['message' => 'Wystąpił błąd serwera. Spróbuj ponownie później.'], $response->json());
         $this->assertStringNotContainsString('tajny@example.com', json_encode($logged));
         $this->assertSame('Database query failed', $logged[0][0] ?? null);
+    }
+
+    public function test_a_post_over_the_php_limit_gets_a_polish_message(): void
+    {
+        Route::post('/api/test-too-large', fn () => throw new PostTooLargeException);
+
+        $this->postJson('/api/test-too-large')->assertStatus(413)
+            ->assertExactJson(['message' => 'Przesłane dane są zbyt duże.']);
     }
 
     public function test_mail_is_not_touched_by_account_routes(): void

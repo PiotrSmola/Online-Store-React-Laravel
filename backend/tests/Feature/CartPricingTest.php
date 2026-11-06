@@ -281,6 +281,15 @@ class CartPricingTest extends TestCase
             ->assertJsonPath('lines.0.quantity', 99);
     }
 
+    public function test_put_accepts_a_product_id_sent_as_a_numeric_string(): void
+    {
+        $product = $this->createProduct();
+        $this->actingAs($this->createCustomer(), 'sanctum');
+
+        $this->putJson('/api/cart', ['items' => [['product_id' => (string) $product->id, 'quantity' => 1, 'size' => 'M', 'color' => 'Czarny']]])
+            ->assertOk()->assertJsonCount(1, 'lines');
+    }
+
     public function test_put_drops_lines_of_deleted_products(): void
     {
         $this->actingAs($this->createCustomer(), 'sanctum');

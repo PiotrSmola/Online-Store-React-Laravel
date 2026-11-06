@@ -200,6 +200,19 @@ class ThumbnailTest extends TestCase
     }
 
     #[RequiresPhpExtension('gd')]
+    public function test_a_photo_as_large_as_the_biggest_in_the_catalog_gets_a_thumbnail(): void
+    {
+        ini_set('memory_limit', '512M');
+
+        // The size of database/data's zdj14.jpg, flat colour so the test file stays small.
+        $this->storeOriginal('huge.jpg', $this->imageBytes('jpg', 5792, 8447));
+
+        $this->artisan('shop:thumbnails')->expectsOutputToContain('Utworzono: 1')->assertSuccessful();
+
+        $this->assertSame([640, 933], array_slice($this->thumbnailInfo('huge.jpg'), 0, 2));
+    }
+
+    #[RequiresPhpExtension('gd')]
     public function test_memory_is_released_between_images(): void
     {
         for ($i = 0; $i < 6; $i++) {

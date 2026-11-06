@@ -43,7 +43,7 @@ class CartController extends Controller
 
         // A cart merged from the browser can name products deleted since it was filled.
         $known = Product::whereIn('id', array_column($validated['items'], 'product_id'))->pluck('id')->all();
-        $items = array_filter($validated['items'], fn (array $item) => in_array($item['product_id'], $known, true));
+        $items = array_filter($validated['items'], fn (array $item) => in_array((int) $item['product_id'], $known, true));
 
         DB::transaction(function () use ($customerId, $items) {
             CartItem::where('customer_id', $customerId)->delete();
@@ -78,7 +78,7 @@ class CartController extends Controller
 
             $rows[$key] = [
                 'customer_id' => $customerId,
-                'product_id' => $item['product_id'],
+                'product_id' => (int) $item['product_id'],
                 'size' => $size,
                 'color' => $color,
                 'quantity' => min(self::MAX_QUANTITY, ($rows[$key]['quantity'] ?? 0) + $item['quantity']),
