@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router";
 import ShopProvider from "./Context/ShopContext";
 import ShopLayout from "./Components/Shop/Layout";
 import ProductList from "./Components/Shop/ProductList";
@@ -10,12 +10,15 @@ import OrderSuccess from "./Components/Shop/OrderSuccess";
 import CategoryProducts from "./Components/Shop/CategoryProducts";
 import CustomerOrders from "./Components/Shop/CustomerOrders";
 import OrderDetail from "./Components/Shop/OrderDetail";
+import "./tailwind.css";
 import "./App.css";
 
 export default function App() {
   return (
     <ShopProvider>
-      <BrowserRouter>
+      {/* Router updates must commit together with state set beside navigate(): Checkout redirects to the
+          cart when it renders empty, so a transition would send a finished order there. */}
+      <BrowserRouter useTransitions={false}>
         <Routes>
           <Route path="/" element={<ShopLayout />}>
             <Route index element={<ProductList />} />

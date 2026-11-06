@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { useShop } from "../../Context/ShopContext";
+import { Link } from "react-router";
+import { useShop } from "../../Context/useShop";
 import PropTypes from 'prop-types';
 import { API_URL } from '../../config';
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { useShop } from "../../Context/ShopContext";
+import { Link } from "react-router";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function CustomerOrders() {
@@ -9,32 +9,32 @@ export default function CustomerOrders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    async function fetchOrders() {
+      try {
+        const res = await fetch(`${API_URL}/api/orders`, {
+          headers: {
+            Authorization: `Bearer ${customerToken}`,
+            Accept: 'application/json',
+          },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setOrders(data);
+        } else {
+          console.error('Orders fetch failed:', res.status, res.statusText);
+        }
+      } catch (error) {
+        console.error("Error fetching orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     if (customer && customerToken) {
       fetchOrders();
     }
   }, [customer, customerToken]);
-
-  async function fetchOrders() {
-    try {
-      const res = await fetch(`${API_URL}/api/orders`, {
-        headers: {
-          Authorization: `Bearer ${customerToken}`,
-          Accept: 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data);
-      } else {
-        console.error('Orders fetch failed:', res.status, res.statusText);
-      }
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const getStatusLabel = (status) => {
     const statuses = {

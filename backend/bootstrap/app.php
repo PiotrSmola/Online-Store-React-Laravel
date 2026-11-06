@@ -12,7 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware) {
+    ->withMiddleware(function (Middleware $middleware): void {
         // Behind the nginx container every shopper would otherwise have the proxy's IP
         // and share one rate limit. Which proxies are trusted is in config/trustedproxy.php.
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR);
@@ -25,6 +25,6 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions) {
+    ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();

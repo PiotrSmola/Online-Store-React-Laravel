@@ -1,5 +1,5 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { useShop } from "../../Context/ShopContext";
+import { Link, Outlet, useLocation } from "react-router";
+import { useShop } from "../../Context/useShop";
 import { useState, useEffect } from "react";
 import CartPreview from "./CartPreview";
 
@@ -13,6 +13,12 @@ export default function ShopLayout() {
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const closeSidebar = () => setSidebarOpen(false);
+
+  // These anchors act as buttons, so a click must not change the URL.
+  const withoutNavigating = (action) => (event) => {
+    event.preventDefault();
+    action();
+  };
 
   const handleLogout = async () => {
     await logoutCustomer();
@@ -60,8 +66,8 @@ export default function ShopLayout() {
           </Link>
           
           <a 
-            onClick={() => setCategoriesOpen(!categoriesOpen)} 
-            href="javascript:void(0)" 
+            onClick={withoutNavigating(() => setCategoriesOpen(!categoriesOpen))} 
+            href="#" 
             className="w3-button w3-block w3-white w3-left-align"
             id="myBtn"
           >
@@ -95,9 +101,9 @@ export default function ShopLayout() {
         
         <a href="#footer" className="w3-bar-item w3-button w3-padding">Kontakt</a>
         <a 
-          href="javascript:void(0)" 
+          href="#" 
           className="w3-bar-item w3-button w3-padding" 
-          onClick={() => setNewsletterOpen(true)}
+          onClick={withoutNavigating(() => setNewsletterOpen(true))}
         >
           Newsletter
         </a>
@@ -119,9 +125,9 @@ export default function ShopLayout() {
       <header className="w3-bar w3-top w3-hide-large w3-black w3-xlarge">
         <div className="w3-bar-item w3-padding-24 w3-wide">SKLEP</div>
         <a 
-          href="javascript:void(0)" 
+          href="#" 
           className="w3-bar-item w3-button w3-padding-24 w3-right" 
-          onClick={toggleSidebar}
+          onClick={withoutNavigating(toggleSidebar)}
         >
           <i className="fa fa-bars"></i>
         </a>

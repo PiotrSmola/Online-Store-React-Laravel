@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useShop } from "../../Context/ShopContext";
+import { useNavigate, Link } from "react-router";
+import { useShop } from "../../Context/useShop";
 import { API_URL } from '../../config';
 
 export default function CustomerLogin() {

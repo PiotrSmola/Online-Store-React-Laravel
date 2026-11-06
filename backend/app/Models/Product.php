@@ -27,9 +27,9 @@ class Product extends Model
         'ocena' => 'decimal:1',
     ];
 
-    protected function asJson($value)
+    protected function asJson($value, $flags = 0)
     {
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return json_encode($value, $flags | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public function images()
