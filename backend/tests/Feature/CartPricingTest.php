@@ -180,6 +180,64 @@ class CartPricingTest extends TestCase
             ->assertJsonPath('subtotal', 0);
     }
 
+    public function test_a_hidden_product_gives_away_nothing_about_itself(): void
+    {
+        $hidden = $this->createProduct(['nazwa' => 'Tajna kolekcja', 'cena' => 777.77, 'is_active' => false, 'rozmiar' => ['XS'], 'kolor' => ['Fuksja']]);
+
+        $response = $this->quote([$this->item($hidden, 2, 'XS', 'Fuksja')])->assertOk();
+
+        $this->assertSame([
+            'key' => "{$hidden->id}:XS:Fuksja",
+            'product_id' => $hidden->id,
+            'variant_id' => null,
+            'product' => null,
+            'size' => 'XS',
+            'color' => 'Fuksja',
+            'quantity' => 2,
+            'unit_price' => 0,
+            'line_total' => 0,
+            'stock' => 0,
+            'available' => false,
+            'error' => 'Ten produkt jest już niedostępny',
+        ], $response->json('lines.0'));
+        $this->assertStringNotContainsString('Tajna', $response->getContent());
+        $this->assertStringNotContainsString('777', $response->getContent());
+    }
+
+    public function test_a_hidden_id_answers_like_one_that_never_existed(): void
+    {
+        $hidden = $this->createProduct(['is_active' => false]);
+
+        $forHidden = $this->quote([['product_id' => $hidden->id, 'quantity' => 1]])->json('lines.0');
+        $forMissing = $this->quote([['product_id' => 999999, 'quantity' => 1]])->json('lines.0');
+
+        unset($forHidden['key'], $forHidden['product_id'], $forMissing['key'], $forMissing['product_id']);
+        $this->assertSame($forHidden, $forMissing);
+    }
+
+    public function test_a_hidden_product_in_a_saved_cart_shows_only_identifiers_too(): void
+    {
+        $product = $this->createProduct();
+        $this->actingAs($this->createCustomer(), 'sanctum');
+        $this->putJson('/api/cart', ['items' => [$this->item($product)]])->assertOk();
+
+        $product->update(['is_active' => false]);
+
+        $this->getJson('/api/cart')->assertJsonPath('lines.0.product', null)
+            ->assertJsonPath('lines.0.product_id', $product->id);
+    }
+
+    public function test_a_sold_out_active_product_keeps_its_details_for_the_cart_page(): void
+    {
+        $product = $this->createProduct(['nazwa' => 'Wyprzedana'], 0);
+
+        $this->quote([$this->item($product)])
+            ->assertJsonPath('lines.0.available', false)
+            ->assertJsonPath('lines.0.product.nazwa', 'Wyprzedana')
+            ->assertJsonPath('lines.0.unit_price', 100.5)
+            ->assertJsonPath('lines.0.product_id', $product->id);
+    }
+
 
     public function test_bad_input_is_rejected(): void
     {

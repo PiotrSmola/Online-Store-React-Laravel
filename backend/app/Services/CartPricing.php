@@ -116,13 +116,18 @@ class CartPricing
 
     private function line(array $item, ?Product $product, Collection $variants): array
     {
+        if (!$product || !$product->is_active) {
+            return $this->withdrawnLine($item);
+        }
+
         $variant = $variants->first(fn (ProductVariant $variant) => $variant->size === $item['size'] && $variant->color === $item['color']);
         $stock = $variant?->stock ?? 0;
-        $unitPrice = $product ? $this->grosze($product->effective_price) : 0;
+        $unitPrice = $this->grosze($product->effective_price);
         $error = $this->lineError($item, $product, $variant);
 
         return [
             'key' => $item['key'],
+            'product_id' => $item['product_id'],
             'variant_id' => $variant?->id,
             'product' => $product,
             'size' => $item['size'],
@@ -136,12 +141,30 @@ class CartPricing
         ];
     }
 
-    private function lineError(array $item, ?Product $product, ?ProductVariant $variant): ?string
+    /**
+     * The endpoint is public and takes any id, so a product that is not for sale gets back
+     * only what the caller sent, the same for a hidden id as for one that never existed.
+     */
+    private function withdrawnLine(array $item): array
     {
-        if (!$product || !$product->is_active) {
-            return 'Ten produkt jest już niedostępny';
-        }
+        return [
+            'key' => $item['key'],
+            'product_id' => $item['product_id'],
+            'variant_id' => null,
+            'product' => null,
+            'size' => $item['size'],
+            'color' => $item['color'],
+            'quantity' => $item['quantity'],
+            'unit_price' => 0.0,
+            'line_total' => 0.0,
+            'stock' => 0,
+            'available' => false,
+            'error' => 'Ten produkt jest już niedostępny',
+        ];
+    }
 
+    private function lineError(array $item, Product $product, ?ProductVariant $variant): ?string
+    {
         $options = $this->optionErrors($product, $item['size'], $item['color']);
 
         if ($options['size'] || $options['color']) {
