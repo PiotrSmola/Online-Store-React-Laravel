@@ -23,6 +23,32 @@ describe('safeRedirect', () => {
     expect(safeRedirect(target)).toBe('/');
   });
 
+  it.each([
+    '/.//evil.test',
+    '/..//evil.test',
+    '/a/..//evil.test',
+    '/%2e%2e//evil.test',
+    '/%2E//evil.test',
+    '/.//.//evil.test',
+    '/a/b/../..//evil.test',
+    '/.//evil.test/path?x=1#y',
+  ])('falls back when normalising %s leaves a second leading slash', (target) => {
+    expect(safeRedirect(target)).toBe('/');
+  });
+
+  it('keeps the query and hash of an internal path', () => {
+    expect(safeRedirect('/orders/5?tab=items#details')).toBe('/orders/5?tab=items#details');
+  });
+
+  it('follows a normalised internal path', () => {
+    expect(safeRedirect('/a/../orders')).toBe('/orders');
+  });
+
+  it('keeps an encoded slash or backslash inside the site', () => {
+    expect(safeRedirect('/%2F/evil.test')).toBe('/%2F/evil.test');
+    expect(safeRedirect('/%5Cevil.test')).toBe('/%5Cevil.test');
+  });
+
   it('uses the given fallback', () => {
     expect(safeRedirect('//evil.test', '/orders')).toBe('/orders');
   });
