@@ -40,10 +40,10 @@ class OrderController extends Controller
                 'cart_items.*.selected_size' => 'nullable|string',
                 'cart_items.*.selected_color' => 'nullable|string',
                 'payment' => 'required|array',
-                'payment.card_number' => 'required_if:payment_method,card|string',
-                'payment.card_name' => 'required_if:payment_method,card|string|max:255',
-                'payment.expiry_date' => 'required_if:payment_method,card|string',
-                'payment.cvv' => 'required_if:payment_method,card|string',
+                'payment.card_number' => 'required_if:payment_method,card|nullable|string',
+                'payment.card_name' => 'required_if:payment_method,card|nullable|string|max:255',
+                'payment.expiry_date' => 'required_if:payment_method,card|nullable|string',
+                'payment.cvv' => 'required_if:payment_method,card|nullable|string',
             ]);
 
             if ($request->payment_method === 'card') {
@@ -300,10 +300,7 @@ class OrderController extends Controller
         }
 
         if (!empty($errors)) {
-            throw new \Illuminate\Validation\ValidationException(
-                validator([], []),
-                response()->json(['errors' => $errors], 422)
-            );
+            throw ValidationException::withMessages($errors);
         }
     }
 
