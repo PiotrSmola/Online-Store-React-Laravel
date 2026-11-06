@@ -4,6 +4,7 @@ namespace Tests\Feature\Concerns;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductVariant;
 
 trait BuildsOrders
 {

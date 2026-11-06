@@ -3,6 +3,7 @@
 
 namespace App\Models;
 
+use App\Services\CatalogService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +35,12 @@ class Product extends Model
         'is_active' => 'boolean',
         'reviews_count' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => CatalogService::flush());
+        static::deleted(fn () => CatalogService::flush());
+    }
 
     protected function asJson($value, $flags = 0)
     {
