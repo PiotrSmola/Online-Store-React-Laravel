@@ -8,14 +8,16 @@ const STEP_BUTTON =
   'aria-disabled:cursor-not-allowed aria-disabled:text-stone aria-disabled:hover:bg-transparent';
 
 /**
- * target names the product for screen readers when a page has several steppers. The buttons use
- * aria-disabled at the limits: a disabled button would drop the keyboard focus it holds.
+ * target names the product for screen readers when a page has several steppers, and max is the
+ * stock when it is known. The buttons use aria-disabled at the limits: a disabled button would
+ * drop the keyboard focus it holds.
  */
-export default function QuantityStepper({ value, onChange, target = '' }) {
+export default function QuantityStepper({ value, onChange, target = '', max = MAX_QUANTITY }) {
   const [draft, setDraft] = useState(null);
   const suffix = target ? `: ${target}` : '';
+  const limit = Math.min(max, MAX_QUANTITY);
   const atMin = value <= 1;
-  const atMax = value >= MAX_QUANTITY;
+  const atMax = value >= limit;
 
   return (
     <div role="group" aria-label={`Ilość${suffix}`} className="inline-flex items-center">
@@ -39,7 +41,7 @@ export default function QuantityStepper({ value, onChange, target = '' }) {
         onChange={(event) => {
           const digits = event.target.value.replace(/\D/g, '').slice(0, 2);
           setDraft(digits);
-          if (digits !== '') onChange(clampQuantity(digits));
+          if (digits !== '') onChange(Math.min(clampQuantity(digits), Math.max(limit, 1)));
         }}
         onBlur={() => setDraft(null)}
       />
@@ -62,4 +64,5 @@ QuantityStepper.propTypes = {
   value: PropTypes.number.isRequired,
   onChange: PropTypes.func.isRequired,
   target: PropTypes.string,
+  max: PropTypes.number,
 };

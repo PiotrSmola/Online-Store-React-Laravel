@@ -10,8 +10,11 @@ function visiblePages(page, lastPage) {
   return [...new Set(pages)];
 }
 
-/** hrefFor(page) gives the URL of a page, so the page number lives in the query string. */
-export default function Pagination({ page, lastPage, hrefFor }) {
+/**
+ * hrefFor(page) gives the URL of a page, so the page number lives in the query string. onNavigate
+ * runs on a click, because the route stays the same and nothing else moves focus to the new page.
+ */
+export default function Pagination({ page, lastPage, hrefFor, onNavigate }) {
   if (lastPage <= 1) return null;
 
   return (
@@ -19,7 +22,7 @@ export default function Pagination({ page, lastPage, hrefFor }) {
       <ul className="flex flex-wrap items-center gap-1">
         {page > 1 && (
           <li>
-            <Link to={hrefFor(page - 1)} aria-label="Poprzednia strona" className={LINK}>
+            <Link to={hrefFor(page - 1)} aria-label="Poprzednia strona" className={LINK} onClick={onNavigate}>
               <ChevronLeft aria-hidden="true" className="size-5" />
             </Link>
           </li>
@@ -32,7 +35,7 @@ export default function Pagination({ page, lastPage, hrefFor }) {
                 {number}
               </span>
             ) : (
-              <Link to={hrefFor(number)} aria-label={`Strona ${number}`} className={LINK}>
+              <Link to={hrefFor(number)} aria-label={`Strona ${number}`} className={LINK} onClick={onNavigate}>
                 {number}
               </Link>
             )}
@@ -40,7 +43,7 @@ export default function Pagination({ page, lastPage, hrefFor }) {
         ))}
         {page < lastPage && (
           <li>
-            <Link to={hrefFor(page + 1)} aria-label="Następna strona" className={LINK}>
+            <Link to={hrefFor(page + 1)} aria-label="Następna strona" className={LINK} onClick={onNavigate}>
               <ChevronRight aria-hidden="true" className="size-5" />
             </Link>
           </li>
@@ -54,4 +57,5 @@ Pagination.propTypes = {
   page: PropTypes.number.isRequired,
   lastPage: PropTypes.number.isRequired,
   hrefFor: PropTypes.func.isRequired,
+  onNavigate: PropTypes.func,
 };

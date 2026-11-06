@@ -47,6 +47,27 @@ describe('ProductImage', () => {
     expect(shown()).toBe(DEFAULT_IMAGE_URL);
   });
 
+  it('offers the thumbnail and the original through srcset', () => {
+    render(<ProductImage image={image} alt="Kurtka" thumbnail />);
+
+    const srcset = screen.getByRole('img', { hidden: true }).getAttribute('srcset');
+    expect(srcset).toMatch(/thumbs\/zdj1\.jpg 640w/);
+    expect(srcset).toMatch(/products\/zdj1\.jpg 1600w/);
+  });
+
+  it('drops srcset after a failure, so the browser cannot pick the missing thumbnail again', () => {
+    render(<ProductImage image={image} alt="Kurtka" thumbnail />);
+
+    failLoading();
+
+    expect(screen.getByRole('img', { hidden: true }).getAttribute('srcset')).toBeNull();
+  });
+
+  it('has no srcset for a product without images', () => {
+    render(<ProductImage alt="Kurtka" />);
+    expect(screen.getByRole('img', { hidden: true }).getAttribute('srcset')).toBeNull();
+  });
+
   it('is lazy with no priority by default', () => {
     render(<ProductImage image={image} alt="Kurtka" />);
 

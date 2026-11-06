@@ -47,6 +47,17 @@ describe('QuantityStepper', () => {
     expect(document.activeElement).toBe(increase());
   });
 
+  it('stops at the stock when it is known', () => {
+    const onChange = vi.fn();
+    render(<QuantityStepper value={3} max={3} onChange={onChange} />);
+
+    fireEvent.click(increase());
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '50' } });
+    expect(onChange).toHaveBeenLastCalledWith(3);
+  });
+
   it('marks neither button in the middle of the range', () => {
     render(<QuantityStepper value={5} onChange={vi.fn()} />);
 

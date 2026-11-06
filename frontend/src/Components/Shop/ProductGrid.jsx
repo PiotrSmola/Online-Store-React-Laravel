@@ -2,18 +2,20 @@ import PropTypes from 'prop-types';
 import { Link } from 'react-router';
 import { useCartActions } from '../../Context/useShop';
 import { useToast } from '../../Context/useToast';
-import { formatPrice } from '../../lib/format';
 import { productHasOptions } from '../../lib/product';
 import Skeleton from '../ui/Skeleton';
 import Button from '../ui/Button';
+import Price from './Price';
 import ProductImage from './ProductImage';
+import ProductLabel from './ProductLabel';
 
 const GRID = 'grid grid-cols-2 gap-x-2 gap-y-8 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
 const FIRST_ROW = 4;
 
-function ProductTile({ product, priority }) {
+function ProductTile({ product, priority, action }) {
   const { addItem } = useCartActions();
   const toast = useToast();
+  const canAddHere = !productHasOptions(product) && product.stock_total > 0;
 
   // A product with a size or color can only be ordered from its page, after choosing one.
   const handleAdd = () => {
@@ -26,13 +28,15 @@ function ProductTile({ product, priority }) {
       <Link to={`/product/${product.id}`} className="group block">
         <ProductImage image={product.images?.[0]} alt="" thumbnail priority={priority} />
         <span className="mt-2 block group-hover:underline">{product.nazwa}</span>
-        <span className="block font-semibold">{formatPrice(product.cena)}</span>
+        <ProductLabel product={product} />
+        <Price product={product} />
       </Link>
-      {!productHasOptions(product) && (
+      {canAddHere && (
         <Button variant="plain" onClick={handleAdd} aria-label={`Dodaj do koszyka: ${product.nazwa}`}>
           Dodaj do koszyka
         </Button>
       )}
+      {action?.(product)}
     </li>
   );
 }
@@ -40,6 +44,7 @@ function ProductTile({ product, priority }) {
 ProductTile.propTypes = {
   product: PropTypes.object.isRequired,
   priority: PropTypes.string.isRequired,
+  action: PropTypes.func,
 };
 
 function tilePriority(index) {
@@ -47,8 +52,11 @@ function tilePriority(index) {
   return index < FIRST_ROW ? 'eager' : 'lazy';
 }
 
-/** prioritizeFirstRow is only for a grid at the top of a page, where a tile can be the LCP image. */
-export default function ProductGrid({ products, prioritizeFirstRow = false }) {
+/**
+ * prioritizeFirstRow is only for a grid at the top of a page, where a tile can be the LCP image.
+ * action(product) adds a control under a tile.
+ */
+export default function ProductGrid({ products, prioritizeFirstRow = false, action }) {
   return (
     <ul className={GRID}>
       {products.map((product, index) => (
@@ -56,6 +64,7 @@ export default function ProductGrid({ products, prioritizeFirstRow = false }) {
           key={product.id}
           product={product}
           priority={prioritizeFirstRow ? tilePriority(index) : 'lazy'}
+          action={action}
         />
       ))}
     </ul>
@@ -65,6 +74,7 @@ export default function ProductGrid({ products, prioritizeFirstRow = false }) {
 ProductGrid.propTypes = {
   products: PropTypes.arrayOf(PropTypes.object).isRequired,
   prioritizeFirstRow: PropTypes.bool,
+  action: PropTypes.func,
 };
 
 /** Keeps the space of the final grid, so nothing moves when products arrive. */
