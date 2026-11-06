@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAdmin;
 use App\Support\SafeExceptionContext;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\QueryException;
@@ -8,6 +9,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -25,6 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Behind the nginx container every shopper would otherwise have the proxy's IP
         // and share one rate limit. Which proxies are trusted is in config/trustedproxy.php.
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR);
+
+        $middleware->alias(['admin' => EnsureAdmin::class]);
+
+        // Before route bindings, so a customer gets a 403 for ids that exist and ids that do not.
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: EnsureAdmin::class);
 
         $middleware->web(append: [
             \Illuminate\Http\Middleware\HandleCors::class,

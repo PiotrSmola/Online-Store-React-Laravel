@@ -1,5 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\CouponController as AdminCouponController;
+use App\Http\Controllers\Admin\CustomerController as AdminCustomerController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Admin\ProductImageController as AdminProductImageController;
+use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\StatsController as AdminStatsController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\CustomerAccountController;
@@ -43,4 +50,31 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{order}', [OrderController::class, 'show']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
     Route::post('/orders/{order}/pay', [OrderController::class, 'pay']);
+});
+
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/stats', AdminStatsController::class);
+
+    Route::get('/products', [AdminProductController::class, 'index']);
+    Route::post('/products', [AdminProductController::class, 'store']);
+    Route::get('/products/{product}', [AdminProductController::class, 'show']);
+    Route::put('/products/{product}', [AdminProductController::class, 'update']);
+    Route::delete('/products/{product}', [AdminProductController::class, 'destroy']);
+    Route::post('/products/{product}/images', [AdminProductImageController::class, 'store']);
+    Route::delete('/products/{product}/images/{image}', [AdminProductImageController::class, 'destroy'])->scopeBindings();
+
+    Route::get('/orders', [AdminOrderController::class, 'index']);
+    Route::get('/orders/{order}', [AdminOrderController::class, 'show']);
+    Route::patch('/orders/{order}/status', [AdminOrderController::class, 'updateStatus']);
+    Route::patch('/orders/{order}/payment', [AdminOrderController::class, 'markPaid']);
+
+    Route::get('/customers', [AdminCustomerController::class, 'index']);
+
+    Route::get('/coupons', [AdminCouponController::class, 'index']);
+    Route::post('/coupons', [AdminCouponController::class, 'store']);
+    Route::get('/coupons/{coupon}', [AdminCouponController::class, 'show']);
+    Route::put('/coupons/{coupon}', [AdminCouponController::class, 'update']);
+    Route::delete('/coupons/{coupon}', [AdminCouponController::class, 'destroy']);
+
+    Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy']);
 });
