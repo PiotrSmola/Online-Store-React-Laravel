@@ -10,6 +10,7 @@ class ConfigController extends Controller
             'pickup_points' => config('shop.pickup_points'),
             'bank_account' => config('shop.bank_account'),
             'free_delivery_from' => config('shop.free_delivery_from'),
+            'contact' => config('shop.contact'),
         ]);
     }
 }

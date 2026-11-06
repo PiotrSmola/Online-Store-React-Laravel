@@ -58,6 +58,7 @@ class AppServiceProvider extends ServiceProvider
             'reset-password' => 10,
             'newsletter' => 5,
             'newsletter-token' => 10,
+            'contact' => 3,
         ];
 
         foreach ($perIpLimits as $name => $perMinute) {

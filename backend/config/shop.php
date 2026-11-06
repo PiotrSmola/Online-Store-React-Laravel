@@ -36,6 +36,15 @@ return [
     // Percent. Prices in the shop are gross.
     'vat_rate' => 23,
 
+    // Fictional defaults: `.example` is reserved and the number cannot be dialled. Contact
+    // form messages are sent to this email.
+    'contact' => [
+        'email' => env('SHOP_CONTACT_EMAIL', 'kontakt@sklep.example'),
+        'phone' => env('SHOP_CONTACT_PHONE', '+48 000 000 000'),
+        'address' => env('SHOP_CONTACT_ADDRESS', 'ul. Przykładowa 1, 00-001 Warszawa'),
+        'opening_hours' => env('SHOP_CONTACT_HOURS', 'pon.-pt. 9:00-17:00'),
+    ],
+
     // Read by `php artisan shop:admin`. There is no default password on purpose.
     'admin' => [
         'email' => env('ADMIN_EMAIL'),
