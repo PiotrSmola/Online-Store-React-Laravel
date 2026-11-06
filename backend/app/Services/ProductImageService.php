@@ -13,8 +13,15 @@ class ProductImageService
 {
     public const DIRECTORY = 'products';
 
+    public const THUMBNAIL_DIRECTORY = self::DIRECTORY . '/thumbs';
+
+    private const THUMBNAIL_WIDTH = 640;
+
     /** Above this a decoded image no longer fits the workers' memory. */
     private const MAX_PIXELS = 40_000_000;
+
+    /** Rough cost of one decoded pixel in GD: four bytes plus line overhead. */
+    private const BYTES_PER_PIXEL = 5;
 
     private const JPEG_QUALITY = 85;
 
@@ -34,6 +41,7 @@ class ProductImageService
         $name = Str::random(40) . '.' . self::EXTENSIONS[$type];
 
         Storage::disk('public')->put(self::DIRECTORY . '/' . $name, $this->reencode($path, $type) ?? file_get_contents($path));
+        $this->makeThumbnail($name);
 
         return ProductImage::create([
             'product_id' => $product->id,
@@ -45,7 +53,87 @@ class ProductImageService
     public function deleteFiles(string $imagePath): void
     {
         // image_path is only ever a bare file name; basename() keeps a bad row inside the directory.
-        Storage::disk('public')->delete(self::DIRECTORY . '/' . basename($imagePath));
+        $name = basename($imagePath);
+
+        Storage::disk('public')->delete([self::DIRECTORY . '/' . $name, self::THUMBNAIL_DIRECTORY . '/' . $name]);
+    }
+
+    public function isAvailable(): bool
+    {
+        return extension_loaded('gd');
+    }
+
+    public function hasThumbnail(string $name): bool
+    {
+        return Storage::disk('public')->exists(self::THUMBNAIL_DIRECTORY . '/' . $name);
+    }
+
+    /**
+     * Writes a copy of a stored image, at most 640 wide, under the same name in thumbs/.
+     * Images narrower than that are copied at their own size, never enlarged.
+     *
+     * @return bool false when the file cannot be turned into a thumbnail
+     */
+    public function makeThumbnail(string $name): bool
+    {
+        $disk = Storage::disk('public');
+        $source = $disk->path(self::DIRECTORY . '/' . $name);
+
+        // Header only: the size is known before any memory is spent on the pixels.
+        $info = @getimagesize($source);
+
+        if (!$info || !isset(self::EXTENSIONS[$info[2]]) || !$this->gdSupports($info[2])) {
+            return false;
+        }
+
+        [$width, $height, $type] = $info;
+
+        if ($width * $height > self::MAX_PIXELS || !$this->fitsInMemory($width, $height)) {
+            return false;
+        }
+
+        $image = @imagecreatefromstring(file_get_contents($source));
+
+        if (!$image) {
+            return false;
+        }
+
+        $targetWidth = min($width, self::THUMBNAIL_WIDTH);
+        $targetHeight = max(1, (int) round($height * $targetWidth / $width));
+        $thumbnail = imagecreatetruecolor($targetWidth, $targetHeight);
+
+        imagealphablending($thumbnail, false);
+        imagesavealpha($thumbnail, true);
+        imagecopyresampled($thumbnail, $image, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+
+        // A GdImage is freed with its last reference; imagedestroy() is a no-op on PHP 8.
+        // The full size bitmap goes first, it is by far the largest allocation here.
+        unset($image);
+
+        $disk->makeDirectory(self::THUMBNAIL_DIRECTORY);
+
+        // Through a temporary file, so a run killed halfway leaves nothing that looks finished.
+        $target = $disk->path(self::THUMBNAIL_DIRECTORY . '/' . $name);
+        $this->encode($thumbnail, $type, $target . '.tmp');
+        unset($thumbnail);
+
+        return rename($target . '.tmp', $target);
+    }
+
+    private function fitsInMemory(int $width, int $height): bool
+    {
+        $limit = ini_parse_quantity(ini_get('memory_limit'));
+
+        return $limit <= 0 || $width * $height * self::BYTES_PER_PIXEL < $limit - memory_get_usage();
+    }
+
+    private function encode(\GdImage $image, int $type, ?string $target = null): void
+    {
+        match ($type) {
+            IMAGETYPE_JPEG => imagejpeg($image, $target, self::JPEG_QUALITY),
+            IMAGETYPE_PNG => imagepng($image, $target),
+            IMAGETYPE_WEBP => imagewebp($image, $target, self::WEBP_QUALITY),
+        };
     }
 
     /**
@@ -77,6 +165,12 @@ class ProductImageService
             return null;
         }
 
+        [$width, $height] = getimagesize($path);
+
+        if (!$this->fitsInMemory($width, $height)) {
+            throw ValidationException::withMessages(['image' => ['Obraz ma zbyt duże wymiary.']]);
+        }
+
         $image = @imagecreatefromstring(file_get_contents($path));
 
         if (!$image) {
@@ -86,18 +180,14 @@ class ProductImageService
         imagesavealpha($image, true);
 
         ob_start();
-        match ($type) {
-            IMAGETYPE_JPEG => imagejpeg($image, null, self::JPEG_QUALITY),
-            IMAGETYPE_PNG => imagepng($image),
-            IMAGETYPE_WEBP => imagewebp($image, null, self::WEBP_QUALITY),
-        };
+        $this->encode($image, $type);
 
         return ob_get_clean();
     }
 
-    public function gdSupports(int $type): bool
+    private function gdSupports(int $type): bool
     {
-        if (!extension_loaded('gd')) {
+        if (!$this->isAvailable()) {
             return false;
         }
 
