@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\ContactMessage;
 use App\Models\Coupon;
 use App\Models\Customer;
+use App\Models\NewsletterSubscriber;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductImage;
@@ -87,6 +89,27 @@ class AdminApiTest extends TestCase
             ->assertJsonPath('low_stock.0.product.nazwa', 'Niski stan');
 
         $this->assertArrayNotHasKey('opis', $response->json('low_stock.0.product'));
+    }
+
+    public function test_stats_count_unread_messages_and_confirmed_subscribers(): void
+    {
+        $read = ContactMessage::create(['name' => 'A', 'email' => 'a@example.com', 'subject' => 'S', 'message' => 'M']);
+        $read->read_at = now();
+        $read->save();
+        ContactMessage::create(['name' => 'B', 'email' => 'b@example.com', 'subject' => 'S', 'message' => 'M']);
+
+        foreach (['a@example.com', 'b@example.com', 'c@example.com'] as $index => $email) {
+            $subscriber = NewsletterSubscriber::create(['email' => $email, 'confirm_token' => "c{$index}", 'unsubscribe_token' => "u{$index}"]);
+
+            if ($index < 2) {
+                $subscriber->confirmed_at = now();
+                $subscriber->save();
+            }
+        }
+
+        $this->getJson('/api/admin/stats')->assertOk()
+            ->assertJsonPath('unread_messages', 1)
+            ->assertJsonPath('confirmed_subscribers', 2);
     }
 
     public function test_refunded_orders_leave_the_revenue(): void

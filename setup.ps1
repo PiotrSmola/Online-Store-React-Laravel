@@ -73,7 +73,7 @@ function Find-FreePort([int]$Preferred, [int[]]$Exclude = @()) {
 function Read-EnvFile([string]$Path) {
     $values = @{}
     if (Test-Path -LiteralPath $Path) {
-        foreach ($line in Get-Content -LiteralPath $Path) {
+        foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
             if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
                 $values[$Matches[1]] = $Matches[2].Trim().Trim('"')
             }
@@ -138,6 +138,10 @@ $appDebug = Get-Setting 'APP_DEBUG' { $defaults['APP_DEBUG'] }
 $mailFromAddress = Get-Setting 'MAIL_FROM_ADDRESS' { $defaults['MAIL_FROM_ADDRESS'] }
 $adminEmail = Get-Setting 'ADMIN_EMAIL' { $defaults['ADMIN_EMAIL'] }
 $adminPassword = Get-Setting 'ADMIN_PASSWORD' { New-RandomString 20 }
+$shopContactEmail = Get-Setting 'SHOP_CONTACT_EMAIL' { $defaults['SHOP_CONTACT_EMAIL'] }
+$shopContactPhone = Get-Setting 'SHOP_CONTACT_PHONE' { $defaults['SHOP_CONTACT_PHONE'] }
+$shopContactAddress = Get-Setting 'SHOP_CONTACT_ADDRESS' { $defaults['SHOP_CONTACT_ADDRESS'] }
+$shopContactHours = Get-Setting 'SHOP_CONTACT_HOURS' { $defaults['SHOP_CONTACT_HOURS'] }
 
 # --- 4. Free ports ----------------------------------------------------------
 Write-Step 'Looking for free ports...'
@@ -180,6 +184,11 @@ DB_ROOT_PASSWORD=$dbRootPassword
 MAIL_FROM_ADDRESS=$mailFromAddress
 ADMIN_EMAIL=$adminEmail
 ADMIN_PASSWORD=$adminPassword
+
+SHOP_CONTACT_EMAIL=$shopContactEmail
+SHOP_CONTACT_PHONE=$shopContactPhone
+SHOP_CONTACT_ADDRESS=$shopContactAddress
+SHOP_CONTACT_HOURS=$shopContactHours
 "@
 [System.IO.File]::WriteAllText($EnvFile, ($envContent -replace "`r`n", "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
 Write-Step 'Saved configuration to .env'
