@@ -5,21 +5,41 @@ import { cleanOptions } from './product';
 import { DELIVERY_METHODS } from './shopConfig';
 
 const UNAVAILABLE = 'Ten produkt jest już niedostępny';
+const CACHE_TTL_MS = 60_000;
 
-// Prices are read once per page load, so changing a quantity sends no request.
+// Changing a quantity sends no request, and views of the same cart share one. Entries hold the
+// promise, so a request still in flight is reused too.
 const productCache = new Map();
 
-async function loadProduct(id, signal) {
-  if (productCache.has(id)) return productCache.get(id);
-
-  try {
-    const product = await getProduct(id, { signal });
-    productCache.set(id, product);
-    return product;
-  } catch (error) {
+function fetchProduct(id) {
+  return getProduct(id).catch((error) => {
     if (error instanceof ApiError && error.status === 404) return null;
+    productCache.delete(id);
     throw error;
-  }
+  });
+}
+
+function loadProduct(id) {
+  const cached = productCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const entry = { expiresAt: Date.now() + CACHE_TTL_MS, promise: fetchProduct(id) };
+  productCache.set(id, entry);
+  return entry.promise;
+}
+
+/** The requests are shared, so one caller's abort only ends that caller's wait for them. */
+function untilAborted(promise, signal) {
+  if (!signal) return promise;
+
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException('Aborted', 'AbortError'));
+
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
 }
 
 function toGrosze(amount) {
@@ -60,7 +80,10 @@ function toLine(item, product) {
  * this file changes then. The order total is always decided by the server.
  */
 export async function quoteCart(items, { deliveryMethod = null, signal } = {}) {
-  const products = await Promise.all(items.map((item) => loadProduct(item.product_id, signal)));
+  const products = await untilAborted(
+    Promise.all(items.map((item) => loadProduct(item.product_id))),
+    signal,
+  );
   const lines = items.map((item, index) => toLine(item, products[index]));
 
   const subtotal = lines.reduce((sum, line) => sum + (line.available ? toGrosze(line.line_total) : 0), 0);
