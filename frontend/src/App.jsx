@@ -10,6 +10,7 @@ import OrderSuccess from "./Components/Shop/OrderSuccess";
 import CategoryProducts from "./Components/Shop/CategoryProducts";
 import CustomerOrders from "./Components/Shop/CustomerOrders";
 import OrderDetail from "./Components/Shop/OrderDetail";
+import "./tailwind.css";
 import "./App.css";
 
 export default function App() {
