@@ -10,10 +10,13 @@ import {
   lineKey,
   mergeCarts,
   normalizeCart,
+  ownerFromStorageEvent,
   readCart,
+  readCartOwner,
   removeLine,
   setLineQuantity,
   writeCart,
+  writeCartOwner,
 } from './cart';
 
 const shirt = { product_id: 1, size: 'M', color: 'Czarny', quantity: 2 };
@@ -24,8 +27,38 @@ function memoryStorage(initial = {}) {
   return {
     getItem: (key) => (data.has(key) ? data.get(key) : null),
     setItem: (key, value) => data.set(key, value),
+    removeItem: (key) => data.delete(key),
   };
 }
+
+describe('writeCart', () => {
+  it('leaves no key behind for an empty cart', () => {
+    const storage = memoryStorage({ cart: '[]' });
+    writeCart(storage, []);
+    expect(storage.getItem('cart')).toBeNull();
+  });
+});
+
+describe('the cart owner', () => {
+  it('reads back what was written', () => {
+    const storage = memoryStorage();
+    writeCartOwner(storage, '7');
+    expect(readCartOwner(storage)).toBe('7');
+  });
+
+  it('removes the key when nobody owns the cart', () => {
+    const storage = memoryStorage({ cartOwner: '7' });
+    writeCartOwner(storage, null);
+    expect(storage.getItem('cartOwner')).toBeNull();
+  });
+
+  it('follows another tab, and ignores other keys', () => {
+    expect(ownerFromStorageEvent({ key: 'cartOwner', newValue: '7' })).toBe('7');
+    expect(ownerFromStorageEvent({ key: 'cartOwner', newValue: null })).toBeNull();
+    expect(ownerFromStorageEvent({ key: null, newValue: null })).toBeNull();
+    expect(ownerFromStorageEvent({ key: 'cart', newValue: '[]' })).toBeUndefined();
+  });
+});
 
 describe('lineKey', () => {
   it('combines product, size and color', () => {

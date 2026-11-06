@@ -1,6 +1,7 @@
 export const MAX_QUANTITY = 99;
 
 const STORAGE_KEY = 'cart';
+const OWNER_KEY = 'cartOwner';
 
 function option(value) {
   const text = String(value ?? '').trim();
@@ -96,8 +97,29 @@ export function readCart(storage) {
   return parseCart(storage.getItem(STORAGE_KEY));
 }
 
+/** An empty cart leaves nothing behind, so a logout removes the key. */
 export function writeCart(storage, items) {
-  storage.setItem(STORAGE_KEY, JSON.stringify(items));
+  if (items.length === 0) storage.removeItem(STORAGE_KEY);
+  else storage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+/**
+ * The customer whose lines the browser holds. A session can expire with a cart still here, and
+ * these lines must return to that customer, never join the next person's account.
+ */
+export function readCartOwner(storage) {
+  return storage.getItem(OWNER_KEY);
+}
+
+export function writeCartOwner(storage, owner) {
+  if (owner === null) storage.removeItem(OWNER_KEY);
+  else storage.setItem(OWNER_KEY, owner);
+}
+
+/** The owner another tab saved, or undefined for any other key. A null key means a full clear. */
+export function ownerFromStorageEvent({ key, newValue }) {
+  if (key === null) return null;
+  return key === OWNER_KEY ? newValue : undefined;
 }
 
 /** The cart another tab saved, or null for any other key. A null key means storage was cleared. */
