@@ -193,7 +193,7 @@ export default function AdminCoupons() {
     try {
       const { message } = await deleteCoupon(coupon.id);
       toast.success(message);
-      list.reload();
+      list.afterRemoval();
     } catch (error) {
       if (error.status !== 401) toast.error(error.message);
     }

@@ -30,16 +30,34 @@ export function usePagedList(fetchPage) {
     [key, setSearchParams],
   );
 
-  const hrefFor = useCallback(
+  const searchFor = useCallback(
     (page) => {
       const next = new URLSearchParams(key);
       if (page > 1) next.set('page', page);
       else next.delete('page');
-      const search = next.toString();
-      return search ? `${pathname}?${search}` : pathname;
+      return next;
     },
-    [key, pathname],
+    [key],
   );
 
-  return { ...resource, query: Object.fromEntries(new URLSearchParams(key)), setQuery, hrefFor };
+  const hrefFor = useCallback(
+    (page) => {
+      const search = searchFor(page).toString();
+      return search ? `${pathname}?${search}` : pathname;
+    },
+    [pathname, searchFor],
+  );
+
+  const { data, reload } = resource;
+
+  // The last row of a later page leaves that page empty, so the list steps back one page.
+  const afterRemoval = useCallback(() => {
+    if (data?.items.length === 1 && data.page > 1) {
+      startTransition(() => setSearchParams(searchFor(data.page - 1), { replace: true }));
+    } else {
+      reload();
+    }
+  }, [data, reload, searchFor, setSearchParams]);
+
+  return { ...resource, query: Object.fromEntries(new URLSearchParams(key)), setQuery, hrefFor, afterRemoval };
 }

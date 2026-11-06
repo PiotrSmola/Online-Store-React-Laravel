@@ -20,9 +20,14 @@ export default function AdminProducts() {
 
     try {
       const result = await deleteProduct(product.id);
-      if (result.deleted) toast.success(result.message);
-      else toast.error(result.message);
-      list.reload();
+
+      if (result.deleted) {
+        toast.success(result.message);
+        list.afterRemoval();
+      } else {
+        toast.error(result.message);
+        list.reload();
+      }
     } catch (error) {
       if (error.status !== 401) toast.error(error.message);
     }
@@ -39,7 +44,7 @@ export default function AdminProducts() {
         <SearchBox label="Nazwa lub kategoria" value={list.query.q ?? ''} onChange={(q) => list.setQuery({ q })} />
       </div>
 
-      <ListBody list={list} emptyTitle="Nie znaleźliśmy produktów">
+      <ListBody list={list} emptyTitle="Nie ma jeszcze produktów">
         <TableRegion label="Lista produktów">
           <thead>
             <tr>
