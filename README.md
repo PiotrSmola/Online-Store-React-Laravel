@@ -45,10 +45,14 @@ The script:
 | Service | Default port | URL |
 |---------|--------------|-----|
 | Shop (React + nginx) | `8080` | http://localhost:8080 |
-| API (Laravel + Apache) | `8000` | http://localhost:8000/api/products |
+| API (Laravel + Apache, localhost only) | `8000` | http://127.0.0.1:8000/api/products |
 | MySQL (localhost only) | `3306` | `127.0.0.1:3306` |
 
 The actual ports are printed at the end of the script and saved in `.env`. Preferred ports can be changed, e.g. `.\setup.ps1 -AppPort 3000` or `./setup.sh --app-port 3000`.
+
+The API and MySQL ports are published on `127.0.0.1` only, so other machines reach the API through the shop on port `8080`.
+
+The stack runs on a fixed subnet (`10.213.47.0/24`) with nginx at `10.213.47.10`, the only proxy Laravel trusts for the client IP. If the subnet clashes with another network, change `DOCKER_SUBNET` and `FRONTEND_IP` together in `.env`. A stack started before this was added needs `docker compose down` first (the setup scripts do that for you).
 
 ### Architecture
 

@@ -131,6 +131,8 @@ if ($dbVolumeExists -and -not $existing.ContainsKey('DB_PASSWORD')) {
     $dbPassword = Get-Setting 'DB_PASSWORD' { New-RandomString }
     $dbRootPassword = Get-Setting 'DB_ROOT_PASSWORD' { New-RandomString }
 }
+$dockerSubnet = Get-Setting 'DOCKER_SUBNET' { $defaults['DOCKER_SUBNET'] }
+$frontendIp = Get-Setting 'FRONTEND_IP' { $defaults['FRONTEND_IP'] }
 
 # --- 4. Free ports ----------------------------------------------------------
 Write-Step 'Looking for free ports...'
@@ -155,6 +157,9 @@ $envContent = @"
 APP_PORT=$appPortFree
 BACKEND_PORT=$backendPortFree
 DB_FORWARD_PORT=$dbPortFree
+
+DOCKER_SUBNET=$dockerSubnet
+FRONTEND_IP=$frontendIp
 
 APP_KEY=$appKey
 
