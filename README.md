@@ -12,7 +12,7 @@ A full-stack e-commerce application built with **Laravel** (backend API) and **R
 - **Data Seeding**: Custom Artisan command to populate products from external API
 
 ### Frontend (React)
-- **Modern React**: Built with React 18 and React Router for navigation
+- **Modern React**: Built with React 19 and React Router for navigation
 - **Product Browsing**: Category filtering, product details, and image galleries
 - **Shopping Cart**: Add/remove items with quantity management
 - **Checkout Process**: Multi-step checkout with customer information and payment
@@ -81,8 +81,8 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 
 ## 📋 Prerequisites (manual setup without Docker)
 
-- **PHP** >= 8.2
-- **Node.js** >= 14
+- **PHP** >= 8.3
+- **Node.js** >= 22.22
 - **Composer**
 - **MySQL** or **SQLite**
 - **Git**
@@ -223,8 +223,8 @@ docker compose exec backend php artisan migrate:fresh --force && docker compose 
 
 ## 🎨 Frontend Technologies
 
-- **React 18** - Modern React with hooks
-- **React Router DOM** - Client-side routing
+- **React 19** - Modern React with hooks
+- **React Router** - Client-side routing
 - **Tailwind CSS** - Utility-first CSS framework
 - **Vite** - Fast build tool and development server
 - **PropTypes** - Runtime type checking
