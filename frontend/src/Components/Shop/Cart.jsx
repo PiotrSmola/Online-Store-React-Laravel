@@ -5,6 +5,7 @@ import { useCartQuote } from '../../hooks/useCartQuote';
 import { useFocusPageHeading } from '../../hooks/useFocusPageHeading';
 import { lineKey } from '../../lib/cart';
 import { formatPrice } from '../../lib/format';
+import { freeDeliveryText } from '../../lib/quote';
 import Button, { ButtonLink } from '../ui/Button';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
@@ -87,11 +88,7 @@ export default function Cart() {
               <span className="text-xl font-semibold">{formatPrice(quote?.subtotal)}</span>
             </p>
           )}
-          <p className="mt-1 text-sm text-stone">
-            {quote?.free_delivery_missing > 0
-              ? `Do darmowej dostawy brakuje ${formatPrice(quote.free_delivery_missing)}.`
-              : 'Masz darmową dostawę.'}
-          </p>
+          <p className="mt-1 min-h-5 text-sm text-stone">{error ? '' : freeDeliveryText(quote)}</p>
           {hasUnavailable && <p className="mt-4 text-ember">Usuń niedostępne produkty, aby przejść dalej.</p>}
 
           {!hasUnavailable && (

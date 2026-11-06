@@ -2,17 +2,16 @@ import PropTypes from 'prop-types';
 import { lineKey } from '../../lib/cart';
 import { formatPrice } from '../../lib/format';
 import { optionsText } from '../../lib/product';
+import { freeDeliveryText } from '../../lib/quote';
 import Button from '../ui/Button';
 import Skeleton from '../ui/Skeleton';
 import ProductImage from './ProductImage';
-
-const THUMB_SIZES = '3rem';
 
 function SummaryLine({ item, line = null }) {
   return (
     <li className="grid grid-cols-[3rem_1fr] gap-x-3">
       {line?.product ? (
-        <ProductImage image={line.product.images?.[0]} alt="" thumbnail priority="eager" sizes={THUMB_SIZES} />
+        <ProductImage image={line.product.images?.[0]} alt="" thumbnail priority="eager" />
       ) : (
         <Skeleton className="aspect-[3/4] w-full bg-white" />
       )}
@@ -32,14 +31,7 @@ SummaryLine.propTypes = {
   line: PropTypes.object,
 };
 
-function freeDeliveryText(quote) {
-  if (!quote) return '';
-  return quote.free_delivery_missing > 0
-    ? `Do darmowej dostawy brakuje ${formatPrice(quote.free_delivery_missing)}.`
-    : 'Masz darmową dostawę.';
-}
-
-export default function CheckoutSummary({ items, quote }) {
+export default function CheckoutSummary({ items, quote, deliveryMethod = null }) {
   const { data, error, reload } = quote;
   const delivery = data?.delivery_price;
 
@@ -89,7 +81,7 @@ export default function CheckoutSummary({ items, quote }) {
             <dd>{formatPrice(data?.total)}</dd>
           </div>
         </dl>
-        <p className="mt-2 min-h-5 text-sm text-stone">{freeDeliveryText(data)}</p>
+        <p className="mt-2 min-h-5 text-sm text-stone">{freeDeliveryText(data, deliveryMethod)}</p>
       </div>
     </aside>
   );
@@ -102,4 +94,5 @@ CheckoutSummary.propTypes = {
     error: PropTypes.object,
     reload: PropTypes.func.isRequired,
   }).isRequired,
+  deliveryMethod: PropTypes.string,
 };

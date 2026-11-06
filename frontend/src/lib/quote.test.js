@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { quoteCart, toQuoteItems } from './quote';
+import { freeDeliveryText, quoteCart, toQuoteItems } from './quote';
 
 function stubFetch(body = { lines: [] }) {
   const mock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
@@ -16,6 +16,29 @@ const items = [
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('freeDeliveryText', () => {
+  it('is empty without a quote', () => {
+    expect(freeDeliveryText(undefined)).toBe('');
+  });
+
+  it('says what is missing', () => {
+    expect(freeDeliveryText({ free_delivery_missing: 12.5 })).toContain('brakuje 12,50');
+  });
+
+  it('confirms free delivery', () => {
+    expect(freeDeliveryText({ free_delivery_missing: 0 })).toBe('Masz bezpłatną dostawę.');
+  });
+
+  it('is empty for store pickup, whatever is missing', () => {
+    expect(freeDeliveryText({ free_delivery_missing: 12.5 }, 'store_pickup')).toBe('');
+    expect(freeDeliveryText({ free_delivery_missing: 0 }, 'store_pickup')).toBe('');
+  });
+
+  it('stays for the methods that deliver', () => {
+    expect(freeDeliveryText({ free_delivery_missing: 12.5 }, 'courier')).toMatch(/brakuje/);
+  });
 });
 
 describe('quoteCart', () => {
