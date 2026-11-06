@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_QUANTITY,
   addLine,
+  cartFingerprint,
+  cartFromQuote,
   cartFromStorageEvent,
   clampQuantity,
   countItems,
   lineKey,
+  mergeCarts,
   normalizeCart,
   readCart,
   removeLine,
@@ -156,6 +159,50 @@ describe('storage', () => {
 
     writeCart(storage, cartFromStorageEvent({ key: 'cart', newValue: saved }));
     expect(storage.getItem('cart')).toBe(saved);
+  });
+});
+
+describe('cartFromQuote', () => {
+  it('turns quote lines into cart lines with only ids and options', () => {
+    const quote = {
+      lines: [
+        { key: '1:M:Czarny', product_id: 1, product: { id: 1 }, size: 'M', color: 'Czarny', quantity: 2, unit_price: 10 },
+        { key: '2::', product_id: 2, product: null, size: '', color: '', quantity: 1, unit_price: 0 },
+      ],
+    };
+
+    expect(cartFromQuote(quote)).toEqual([shirt, belt]);
+  });
+});
+
+describe('mergeCarts', () => {
+  it('keeps lines from both carts', () => {
+    expect(mergeCarts([shirt], [belt])).toEqual([shirt, belt]);
+  });
+
+  it('takes the higher quantity of a shared line', () => {
+    expect(mergeCarts([shirt], [{ ...shirt, quantity: 5 }])).toEqual([{ ...shirt, quantity: 5 }]);
+    expect(mergeCarts([{ ...shirt, quantity: 5 }], [shirt])).toEqual([{ ...shirt, quantity: 5 }]);
+  });
+
+  it('changes nothing when run again, as happens on every reload', () => {
+    const once = mergeCarts([shirt], [shirt, belt]);
+    expect(mergeCarts(once, [shirt, belt])).toEqual(once);
+  });
+
+  it('works with an empty side', () => {
+    expect(mergeCarts([], [shirt])).toEqual([shirt]);
+    expect(mergeCarts([shirt], [])).toEqual([shirt]);
+  });
+});
+
+describe('cartFingerprint', () => {
+  it('ignores the order of lines', () => {
+    expect(cartFingerprint([shirt, belt])).toBe(cartFingerprint([belt, shirt]));
+  });
+
+  it('sees a changed quantity', () => {
+    expect(cartFingerprint([shirt])).not.toBe(cartFingerprint([{ ...shirt, quantity: 9 }]));
   });
 });
 

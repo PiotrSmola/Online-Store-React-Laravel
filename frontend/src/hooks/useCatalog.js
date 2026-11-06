@@ -1,15 +1,17 @@
 import { useCallback } from 'react';
-import { getCategories, getProduct, getProducts, getProductsByCategory } from '../lib/catalog';
+import { getCatalogFilters, getCategories, getProduct, getProducts, getShopConfig } from '../lib/catalog';
 import { useResource } from './useResource';
 
-export function useProducts({ limit } = {}) {
-  const load = useCallback((signal) => getProducts({ limit, signal }), [limit]);
-  return useResource(load, `products:${limit ?? 'all'}`);
+/** query holds the fields of GET /products. Old results stay on screen while new ones load. */
+export function useProducts(query) {
+  const key = `products:${JSON.stringify(query)}`;
+  const load = useCallback((signal) => getProducts(JSON.parse(key.slice('products:'.length)), { signal }), [key]);
+  return useResource(load, key, { keepPrevious: true });
 }
 
-export function useCategoryProducts(category, { limit } = {}) {
-  const load = useCallback((signal) => getProductsByCategory(category, { limit, signal }), [category, limit]);
-  return useResource(load, category ? `category:${category}:${limit ?? 'all'}` : null);
+export function useCatalogFilters(category) {
+  const load = useCallback((signal) => getCatalogFilters({ category, signal }), [category]);
+  return useResource(load, `filters:${category ?? ''}`);
 }
 
 export function useProduct(id) {
@@ -20,4 +22,9 @@ export function useProduct(id) {
 export function useCategories() {
   const load = useCallback((signal) => getCategories({ signal }), []);
   return useResource(load, 'categories');
+}
+
+export function useShopConfig() {
+  const load = useCallback((signal) => getShopConfig({ signal }), []);
+  return useResource(load, 'config');
 }

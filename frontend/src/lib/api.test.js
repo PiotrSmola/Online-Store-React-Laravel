@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getToken, isAbortError, onUnauthorized, request, storeToken } from './api';
+import { ApiError, download, getToken, isAbortError, onUnauthorized, request, saveFile, storeToken } from './api';
 import { signIn, verifySession } from './session';
 
 const TOKEN = 'token-123';
@@ -76,6 +76,74 @@ describe('request', () => {
     const { signal } = new AbortController();
     await request('/products', { signal });
     expect(fetchMock.mock.calls[0][1].signal).toBe(signal);
+  });
+});
+
+describe('uploads and downloads', () => {
+  it('sends a FormData body as it is, so the browser sets the boundary', async () => {
+    const fetchMock = respondWith(201, { id: 1 });
+    const body = new FormData();
+    body.append('image', 'x');
+
+    await request('/admin/products/1/images', { method: 'POST', body });
+
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.body).toBe(body);
+    expect(options.headers['Content-Type']).toBeUndefined();
+  });
+
+  it('downloads a file with the bearer header and its server name', async () => {
+    storeToken(TOKEN);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('PDF', { status: 200, headers: { 'Content-Disposition': 'attachment; filename="faktura-1.pdf"' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = await download('/orders/1/invoice');
+
+    expect(file.name).toBe('faktura-1.pdf');
+    expect(await file.blob.text()).toBe('PDF');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('reads a failed download as JSON', async () => {
+    respondWith(409, { message: 'Faktura będzie dostępna po opłaceniu.' });
+    expect((await failure(download('/orders/1/invoice'))).status).toBe(409);
+  });
+
+  it('revokes the object URL after saving', () => {
+    vi.useFakeTimers();
+    const revoke = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:1', revokeObjectURL: revoke });
+    vi.stubGlobal('document', { createElement: () => ({ click: vi.fn() }) });
+
+    saveFile({ blob: new Blob(['x']), name: 'a.pdf' });
+    vi.runAllTimers();
+
+    expect(revoke).toHaveBeenCalledWith('blob:1');
+    vi.useRealTimers();
+  });
+});
+
+describe('rate limits', () => {
+  it('turns Retry-After into a concrete wait', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: 'Zbyt wiele prób. Spróbuj ponownie za chwilę.' }), { status: 429, headers: { 'Retry-After': '42' } }),
+    ));
+
+    expect((await failure(request('/contact'))).message).toBe('Zbyt wiele prób. Spróbuj ponownie za 42 s.');
+  });
+
+  it('keeps a specific message such as the open order limit', async () => {
+    const message = 'Masz zbyt wiele nieopłaconych zamówień.';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ message }), { status: 429 })));
+
+    expect((await failure(request('/orders'))).message).toBe(message);
+  });
+
+  it('keeps the response body for a declined payment', async () => {
+    respondWith(402, { message: 'Odrzucono', order: { id: 1 } });
+    expect((await failure(request('/orders/1/pay'))).data.order.id).toBe(1);
   });
 });
 

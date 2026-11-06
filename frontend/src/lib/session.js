@@ -5,6 +5,10 @@ export function signIn(credentials) {
   return request('/customer/login', { method: 'POST', body: credentials, quiet401: true });
 }
 
+export function register(account) {
+  return request('/customer/register', { method: 'POST', body: account });
+}
+
 export function signOut() {
   return request('/customer/logout', { method: 'POST', quiet401: true });
 }
@@ -20,4 +24,20 @@ export function getCurrentCustomer({ signal } = {}) {
  */
 export function verifySession() {
   return request('/customer/me', { expectSession: true });
+}
+
+export function forgotPassword(email) {
+  return request('/customer/forgot-password', { method: 'POST', body: { email } });
+}
+
+export function resetPassword(details) {
+  return request('/customer/reset-password', { method: 'POST', body: details });
+}
+
+export function updateProfile(profile) {
+  return request('/customer/profile', { method: 'PUT', body: profile });
+}
+
+export function updatePassword(passwords) {
+  return request('/customer/password', { method: 'PUT', body: passwords });
 }

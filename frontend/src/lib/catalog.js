@@ -1,28 +1,41 @@
 import { request } from './api';
 
-// A later catalog API answers with one page of products. Pages read { items, total } only, so
-// pagination and filters change this file alone.
-function toProductPage(data, limit) {
-  const items = Array.isArray(data) ? data : (data?.data ?? []);
+export function toSearch(query) {
+  const entries = Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  return entries.length > 0 ? `?${new URLSearchParams(entries)}` : '';
+}
+
+/** The fields of Laravel's paginator that pages use. */
+export function toPage(data) {
   return {
-    items: limit ? items.slice(0, limit) : items,
-    total: Array.isArray(data) ? data.length : (data?.total ?? items.length),
+    items: data.data,
+    total: data.total,
+    page: data.current_page,
+    lastPage: data.last_page,
   };
 }
 
-export async function getProducts({ limit, signal } = {}) {
-  return toProductPage(await request('/products', { signal }), limit);
-}
-
-export async function getProductsByCategory(category, { limit, signal } = {}) {
-  const path = `/products/category/${encodeURIComponent(category)}`;
-  return toProductPage(await request(path, { signal }), limit);
+/** Query fields are those of GET /products: q, category, sort, page and so on. */
+export async function getProducts(query = {}, { signal } = {}) {
+  return toPage(await request(`/products${toSearch(query)}`, { signal }));
 }
 
 export function getProduct(id, { signal } = {}) {
   return request(`/products/${encodeURIComponent(id)}`, { signal });
 }
 
+export function getCatalogFilters({ category, signal } = {}) {
+  return request(`/catalog/filters${toSearch({ category })}`, { signal });
+}
+
 export function getCategories({ signal } = {}) {
   return request('/categories', { signal });
+}
+
+export function getShopConfig({ signal } = {}) {
+  return request('/config', { signal });
+}
+
+export function postReview(productId, review) {
+  return request(`/products/${encodeURIComponent(productId)}/reviews`, { method: 'POST', body: review });
 }

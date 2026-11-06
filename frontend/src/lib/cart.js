@@ -41,6 +41,29 @@ export function countItems(items) {
   return items.reduce((total, item) => total + item.quantity, 0);
 }
 
+/** A quote's lines as cart lines. The server writes a missing option as an empty string. */
+export function cartFromQuote(quote) {
+  return quote.lines.reduce((items, line) => addLine(items, line), []);
+}
+
+/**
+ * Joins the browser's cart and the account's. The higher quantity of a line wins, not the sum, so
+ * running this again after a reload changes nothing.
+ */
+export function mergeCarts(local, saved) {
+  return saved.reduce((items, line) => {
+    const key = lineKey(line);
+    const existing = items.find((item) => lineKey(item) === key);
+    if (!existing) return addLine(items, line);
+    return setLineQuantity(items, key, Math.max(existing.quantity, line.quantity));
+  }, local);
+}
+
+/** Text to compare two carts by, regardless of line order. */
+export function cartFingerprint(items) {
+  return items.map((item) => `${lineKey(item)}=${item.quantity}`).sort().join('|');
+}
+
 // Carts saved before this format held the whole product: { product, selectedSize, selectedColor }.
 function toStoredLine(entry) {
   return {
