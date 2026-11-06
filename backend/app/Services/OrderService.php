@@ -2,14 +2,19 @@
 
 namespace App\Services;
 
+use App\Mail\OrderPlaced;
+use App\Mail\OrderStatusChanged;
 use App\Models\CartItem;
 use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProductVariant;
+use App\Support\SafeExceptionContext;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class OrderService
@@ -95,6 +100,7 @@ class OrderService
 
             $this->recordEvent($order, 'pending');
             CartItem::where('customer_id', $customer->id)->delete();
+            $this->queueMail($order, new OrderPlaced($order));
 
             Log::info('Order created', ['order_id' => $order->id]);
 
@@ -142,6 +148,7 @@ class OrderService
             $locked->status = $status;
             $locked->save();
             $this->recordEvent($locked, $status, $note);
+            $this->queueMail($locked, new OrderStatusChanged($locked, $note));
 
             return $locked;
         }, 3);
@@ -223,10 +230,24 @@ class OrderService
 
         $order->save();
         $this->recordEvent($order, $order->status, $note);
+        $this->queueMail($order, new OrderStatusChanged($order, $note));
 
         Log::info('Order paid', ['order_id' => $order->id]);
 
         return $order;
+    }
+
+    // After the commit, so a rolled back order sends nothing. A mail problem must not
+    // turn an order that is already saved into an error for the customer.
+    private function queueMail(Order $order, Mailable $mail): void
+    {
+        DB::afterCommit(function () use ($order, $mail) {
+            try {
+                Mail::to($order->customer->email)->queue($mail);
+            } catch (\Throwable $e) {
+                Log::error('Order email could not be queued', ['order_id' => $order->id] + SafeExceptionContext::of($e));
+            }
+        });
     }
 
     // The WHERE repeats the check the lock already made, so stock cannot go below zero
