@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useShop, productHasOptions } from "../../Context/ShopContext";
+import { useShop } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
 export default function ProductList() {
-  const { products, loading, addToCart } = useShop();
+  const { products, loading, addToCart, productHasOptions } = useShop();
   const navigate = useNavigate();
 
   // A product with a size or color can only be ordered after choosing one.

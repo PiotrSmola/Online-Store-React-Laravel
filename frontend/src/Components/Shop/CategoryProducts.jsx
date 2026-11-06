@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useShop, productHasOptions } from "../../Context/ShopContext";
+import { useShop } from "../../Context/ShopContext";
 import { API_URL } from '../../config';
 
 export default function CategoryProducts() {
   const { category } = useParams();
-  const { addToCart } = useShop();
+  const { addToCart, productHasOptions } = useShop();
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);

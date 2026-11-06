@@ -133,6 +133,9 @@ export default function ShopProvider({ children }) {
     return cart.reduce((total, item) => total + item.quantity, 0);
   };
 
+  const productHasOptions = (product) =>
+    product.rozmiar?.length > 0 || product.kolor?.length > 0;
+
   const loginCustomer = (customerData, token) => {
     setCustomer(customerData);
     setCustomerToken(token);
@@ -185,6 +188,7 @@ export default function ShopProvider({ children }) {
     clearCart,
     getCartTotal,
     getCartItemsCount,
+    productHasOptions,
   };
 
   return (
@@ -197,10 +201,6 @@ export default function ShopProvider({ children }) {
 ShopProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
-
-export function productHasOptions(product) {
-  return product.rozmiar?.length > 0 || product.kolor?.length > 0;
-}
 
 export function useShop() {
   const context = useContext(ShopContext);
