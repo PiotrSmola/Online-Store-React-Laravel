@@ -85,6 +85,7 @@ class ProductController extends Controller
             'variants.*.size' => 'nullable|string|max:255',
             'variants.*.color' => 'nullable|string|max:255',
             'variants.*.stock' => 'required|integer|min:0|max:1000000',
+            'variants.*.original_stock' => 'nullable|integer|min:0|max:1000000',
         ]);
 
         $this->rejectDuplicates($validated['variants'] ?? []);

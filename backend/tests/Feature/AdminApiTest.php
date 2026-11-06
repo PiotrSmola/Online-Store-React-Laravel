@@ -168,7 +168,7 @@ class AdminApiTest extends TestCase
         $keptId = $this->variantOf($product, 'M')->id;
 
         $this->putJson("/api/admin/products/{$product->id}", ['variants' => [
-            ['size' => 'M', 'color' => 'Czarny', 'stock' => 9],
+            ['size' => 'M', 'color' => 'Czarny', 'stock' => 9, 'original_stock' => 5],
             ['size' => 'XL', 'color' => 'Czarny', 'stock' => 1],
         ]])->assertOk()
             ->assertJsonPath('rozmiar', ['M', 'XL'])
@@ -194,6 +194,83 @@ class AdminApiTest extends TestCase
     {
         $this->postJson('/api/admin/products', $this->productBody())->assertCreated()->assertJsonPath('is_new', false);
         $this->postJson('/api/admin/products', $this->productBody(['is_new' => true]))->assertCreated()->assertJsonPath('is_new', true);
+    }
+
+    /** A product whose M/Czarny variant had 10 when the form was loaded and 7 after three sales. */
+    private function productSoldWhileTheFormWasOpen(): Product
+    {
+        $product = $this->createProduct(['rozmiar' => ['M'], 'kolor' => ['Czarny']], 10);
+        $customer = $this->createCustomer();
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->placeOrder($customer, $product);
+        }
+
+        $this->assertSame(7, $this->variantOf($product)->stock);
+
+        return $product;
+    }
+
+    private function saveForm(Product $product, int $stock, ?int $original = 10): TestResponse
+    {
+        return $this->putJson("/api/admin/products/{$product->id}", ['variants' => [
+            array_filter(['size' => 'M', 'color' => 'Czarny', 'stock' => $stock, 'original_stock' => $original], fn ($value) => $value !== null),
+        ]]);
+    }
+
+    public function test_a_form_saved_unchanged_keeps_sales_made_while_it_was_open(): void
+    {
+        $product = $this->productSoldWhileTheFormWasOpen();
+
+        $this->saveForm($product, 10)->assertOk()->assertJsonPath('variants.0.stock', 7);
+
+        $this->assertSame(7, $this->variantOf($product)->stock);
+    }
+
+    public function test_a_stock_change_is_applied_on_top_of_those_sales(): void
+    {
+        $product = $this->productSoldWhileTheFormWasOpen();
+
+        $this->saveForm($product, 15)->assertOk()->assertJsonPath('variants.0.stock', 12);
+    }
+
+    public function test_lowering_stock_on_a_stale_form_stops_at_zero(): void
+    {
+        $product = $this->productSoldWhileTheFormWasOpen();
+
+        $this->saveForm($product, 1)->assertOk()->assertJsonPath('variants.0.stock', 0);
+    }
+
+    public function test_an_existing_variant_needs_the_stock_the_form_loaded(): void
+    {
+        $product = $this->productSoldWhileTheFormWasOpen();
+
+        $this->saveForm($product, 10, null)
+            ->assertStatus(422)->assertJsonValidationErrors(['variants.0.original_stock']);
+
+        $this->assertSame(7, $this->variantOf($product)->stock);
+    }
+
+    public function test_a_refused_form_changes_nothing_at_all(): void
+    {
+        $product = $this->createProduct(['cena' => 100, 'rozmiar' => ['M'], 'kolor' => ['Czarny']]);
+
+        $this->putJson("/api/admin/products/{$product->id}", [
+            'cena' => 200,
+            'variants' => [['size' => 'M', 'color' => 'Czarny', 'stock' => 1]],
+        ])->assertStatus(422);
+
+        $this->assertSame('100.00', $product->fresh()->cena);
+    }
+
+    public function test_a_new_variant_takes_its_stock_as_typed(): void
+    {
+        $product = $this->productSoldWhileTheFormWasOpen();
+
+        $this->putJson("/api/admin/products/{$product->id}", ['variants' => [
+            ['size' => 'M', 'color' => 'Czarny', 'stock' => 10, 'original_stock' => 10],
+            ['size' => 'XL', 'color' => 'Czarny', 'stock' => 4],
+        ]])->assertOk()->assertJsonPath('stock_total', 11);
     }
 
     public function test_put_without_variants_leaves_them_alone(): void

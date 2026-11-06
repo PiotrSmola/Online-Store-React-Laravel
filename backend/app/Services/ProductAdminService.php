@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProductAdminService
 {
@@ -26,6 +27,9 @@ class ProductAdminService
     public function update(Product $product, array $data): Product
     {
         return DB::transaction(function () use ($product, $data) {
+            // Two admins saving at once take turns, so neither can create a variant the other just did.
+            Product::query()->whereKey($product->id)->lockForUpdate()->first();
+
             $product->update(array_diff_key($data, ['variants' => true]));
 
             if (isset($data['variants'])) {
@@ -55,21 +59,29 @@ class ProductAdminService
         return true;
     }
 
-    // Under the row locks: an order running at the same moment either finished, and its
-    // decrement is overwritten by the stock the admin typed, or waits and sees the new value.
+    /**
+     * For a variant that exists, the form says what the admin saw and what they want. Only the
+     * difference is applied, to the stock as it is under the lock: orders placed while the
+     * form was open stay counted, and a form saved unchanged changes nothing.
+     */
     private function syncVariants(Product $product, array $variants): void
     {
         $existing = ProductVariant::query()->where('product_id', $product->id)->orderBy('id')->lockForUpdate()->get();
         $keep = [];
 
-        foreach ($variants as $variant) {
+        foreach ($variants as $index => $variant) {
             $size = trim((string) ($variant['size'] ?? ''));
             $color = trim((string) ($variant['color'] ?? ''));
 
-            $row = $existing->first(fn (ProductVariant $row) => $row->size === $size && $row->color === $color)
-                ?? new ProductVariant(['product_id' => $product->id, 'size' => $size, 'color' => $color]);
+            $row = $existing->first(fn (ProductVariant $row) => $row->size === $size && $row->color === $color);
 
-            $row->stock = $variant['stock'];
+            if ($row) {
+                $row->stock = $this->mergedStock($row, $variant, $index);
+            } else {
+                $row = new ProductVariant(['product_id' => $product->id, 'size' => $size, 'color' => $color]);
+                $row->stock = $variant['stock'];
+            }
+
             $row->save();
             $keep[] = $row->id;
         }
@@ -84,5 +96,16 @@ class ProductAdminService
             'rozmiar' => Product::cleanOptions(array_column($variants, 'size')),
             'kolor' => Product::cleanOptions(array_column($variants, 'color')),
         ]);
+    }
+
+    private function mergedStock(ProductVariant $row, array $variant, int $index): int
+    {
+        if (!isset($variant['original_stock'])) {
+            throw ValidationException::withMessages([
+                "variants.{$index}.original_stock" => ['Podaj stan magazynowy wczytany do formularza.'],
+            ]);
+        }
+
+        return max(0, $row->stock + $variant['stock'] - $variant['original_stock']);
     }
 }
