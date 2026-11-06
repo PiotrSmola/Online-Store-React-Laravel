@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -149,6 +151,8 @@ class OrderController extends Controller
                 'message' => 'Błędy walidacji',
                 'errors' => $e->errors()
             ], 422);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (\Throwable $e) {
             Log::error('Order creation failed', $this->safeExceptionContext($e));
 
@@ -165,7 +169,7 @@ class OrderController extends Controller
         $customer = Customer::where('email', $request->email)->first();
 
         if ($customer) {
-            if ($request->password === null || !Hash::check($request->password, $customer->password)) {
+            if ($request->password === null || !$this->passwordMatches($request, $customer)) {
                 throw ValidationException::withMessages([
                     'email' => ['Konto z tym adresem e-mail już istnieje. Zaloguj się, aby złożyć zamówienie.'],
                 ]);
@@ -187,6 +191,28 @@ class OrderController extends Controller
         }
 
         return null;
+    }
+
+    // Every failed password check spends the budget of the login route, so this endpoint
+    // cannot be used to guess more passwords than login allows.
+    private function passwordMatches(Request $request, Customer $customer): bool
+    {
+        $limit = RateLimiter::limiter('login')($request);
+        $bucket = md5('login' . $limit->key); // The name throttle:login gives its bucket.
+
+        if (RateLimiter::tooManyAttempts($bucket, $limit->maxAttempts)) {
+            throw new HttpResponseException(($limit->responseCallback)($request, [
+                'Retry-After' => RateLimiter::availableIn($bucket),
+            ]));
+        }
+
+        if (Hash::check($request->password, $customer->password)) {
+            return true;
+        }
+
+        RateLimiter::hit($bucket, $limit->decaySeconds);
+
+        return false;
     }
 
     private function buildOrderItems(array $cartItems): array
