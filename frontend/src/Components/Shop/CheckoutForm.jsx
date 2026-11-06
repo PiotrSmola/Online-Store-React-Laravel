@@ -125,6 +125,14 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
 
   const applyCoupon = () => setAppliedCoupon(values.coupon_code.trim());
 
+  // Enter here means this code, not the whole order.
+  const handleCouponKey = (event) => {
+    if (event.key !== 'Enter') return;
+
+    event.preventDefault();
+    applyCoupon();
+  };
+
   const removeCoupon = () => {
     setAppliedCoupon('');
     updateField('coupon_code', '');
@@ -134,7 +142,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
     event.preventDefault();
     if (form.submitting) return;
 
-    if (!quote.data) {
+    if (!quote.data || quote.loading) {
       form.fail({}, 'Poczekaj na podsumowanie zamówienia albo spróbuj je wczytać ponownie.');
       return;
     }
@@ -158,7 +166,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
         // with no password field and no way forward. A refused token redirects to login here.
         if (!isGuest) await verifySession();
 
-        const coupon = quote.data.coupon ? appliedCoupon : '';
+        const coupon = quote.data.coupon?.code ?? '';
         const result = await placeOrder(buildOrderPayload({ ...values, coupon_code: coupon }, items, { isGuest }));
 
         onPlaced();
@@ -363,6 +371,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
                 autoComplete: 'off',
                 className: 'min-w-48 grow sm:max-w-xs',
                 onBlur: undefined,
+                onKeyDown: handleCouponKey,
                 error: form.errors.coupon_code ?? couponError,
               })}
               <Button
@@ -395,7 +404,7 @@ export default function CheckoutForm({ customer = null, onPlaced }) {
           </div>
         </form>
 
-        <CheckoutSummary items={items} quote={quote} />
+        <CheckoutSummary items={items} quote={quote} deliveryMethod={values.delivery_method} />
       </div>
     </div>
   );
